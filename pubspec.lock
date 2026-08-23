@@ -140,11 +140,12 @@ packages:
   background_downloader:
     dependency: "direct main"
     description:
-      name: background_downloader
-      sha256: d27fcaf94f738032f1e6db098230799bf31ae7bf184f173fc9a752fcdae75c0e
-      url: "https://pub.dev"
-    source: hosted
-    version: "9.5.6"
+      path: "."
+      ref: "feat/mtls-desktop-support-8101797678179291203"
+      resolved-ref: "24d839cf0881f84efe6fb244b41cbc35f29d04e7"
+      url: "https://github.com/781flyingdutchman/background_downloader.git"
+    source: git
+    version: "9.5.8"
   balanced_text:
     dependency: "direct main"
     description:
