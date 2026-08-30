@@ -186,6 +186,7 @@ class OutputMenuHeader extends ConsumerWidget {
           if (Platform.isAndroid)
             IconButton(
               icon: Icon(TablerIcons.cast),
+              tooltip: AppLocalizations.of(context)!.outputMenuButtonTitle,
               onPressed: () {
                 final audioHandler = GetIt.instance<MusicPlayerBackgroundTask>();
                 audioHandler.getRoutes();

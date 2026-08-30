@@ -106,7 +106,7 @@ class MusicScreenDrawer extends ConsumerWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                            if (ref.watch(isDownloadingOrSyncingPollingProvider)) ...[
+                            if (ref.watch(isDownloadingOrSyncingProvider).value ?? downloadsService.isProcessing) ...[
                               SizedBox(height: 8),
                               Text(
                                 context.l10n.connectionStateInfoString(

@@ -48,7 +48,10 @@ class DownloadsService {
   // These track node counts for the overview on the downloads screen
   final Map<String, int> downloadCounts = {repairStepTrackingName: 0};
   late final Stream<Map<String, int>> downloadCountsStream;
-  final StreamController<Map<String, int>> _downloadCountsStreamController = StreamController.broadcast();
+  late final StreamController<Map<String, int>> _downloadCountsStreamController;
+  StreamSubscription<void>? _downloadCountsSubscription;
+
+  final BehaviorSubject<bool> _activityStreamController = BehaviorSubject.seeded(false);
 
   // Private flags/counters used to calculate public sync/download flags
   bool _fileSystemFull = false;
@@ -183,6 +186,10 @@ class DownloadsService {
       trailing: true,
     );
     offlineDeletesStream = _offlineDeletesStreamController.stream;
+    _downloadCountsStreamController = StreamController.broadcast(
+      onListen: _startWatchingDownloadCounts,
+      onCancel: _stopWatchingDownloadCounts,
+    );
     downloadCountsStream = _downloadCountsStreamController.stream;
 
     updateDownloadCounts();
@@ -405,8 +412,19 @@ class DownloadsService {
     }
   }
 
-  /// Update download counts with current values.  Repeatedly called
-  /// while on downloads screen to update overview.
+  /// Whether a download, delete, or sync queue is currently active.
+  bool get isProcessing => syncBuffer.isRunning || deleteBuffer.isRunning || downloadTaskQueue.isRunning;
+
+  /// Emits whenever download queue activity changes.
+  Stream<bool> get activityStream => _activityStreamController.stream.distinct();
+
+  /// Called by the queue backends when they start or stop processing work.
+  void notifyActivityChanged() {
+    _activityStreamController.add(isProcessing);
+  }
+
+  /// Update download counts with current values. Isar changes trigger this
+  /// automatically, keeping the downloads overview event-driven.
   void updateDownloadCounts() {
     _isar.txnSync(() {
       downloadCounts["track"] = _isar.downloadItems
@@ -425,6 +443,20 @@ class DownloadsService {
           .countSync();
       _downloadCountsStreamController.add(downloadCounts);
     });
+  }
+
+  void _startWatchingDownloadCounts() {
+    updateDownloadCounts();
+    _downloadCountsSubscription ??= Rx.merge<void>([
+      _isar.downloadItems.watchLazy(),
+      _isar.isarTaskDatas.watchLazy(),
+    ]).debounceTime(const Duration(milliseconds: 250)).listen((_) => updateDownloadCounts());
+  }
+
+  void _stopWatchingDownloadCounts() {
+    final subscription = _downloadCountsSubscription;
+    _downloadCountsSubscription = null;
+    if (subscription != null) unawaited(subscription.cancel());
   }
 
   // TODO use download groups to send notification when item fully downloaded?

@@ -435,6 +435,10 @@
     "shareLogs": "Share logs",
     "exportLogs": "Save logs",
     "logsCopied": "Logs copied.",
+    "copyLogs": "Copy logs",
+    "@copyLogs": {
+        "description": "Tooltip for the button that copies app logs to the clipboard."
+    },
     "message": "Message",
     "stackTrace": "Stack Trace",
     "applicationLegalese": "Licensed with the Mozilla Public License 2.0.\nSource code available at {sourceCodeLink}.",

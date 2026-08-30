@@ -69,13 +69,7 @@ class _ProgressSliderState extends State<ProgressSlider> {
                                 height: 24.0,
                                 child: Stack(
                                   children: [
-                                    Slider(
-                                      value: 0,
-                                      max: 1,
-                                      onChanged: null,
-                                      autofocus: false,
-                                      focusNode: FocusNode(skipTraversal: true, canRequestFocus: false),
-                                    ),
+                                    ExcludeFocus(child: Slider(value: 0, max: 1, onChanged: null, autofocus: false)),
                                   ],
                                 ),
                               ),
@@ -220,72 +214,73 @@ class __PlaybackProgressSliderState extends ConsumerState<_PlaybackProgressSlide
               trackHeight: 4.0,
             ),
       // ),
-      child: Slider(
-        min: 0.0,
-        max: widget.mediaItem?.duration == null
-            ? widget.playbackState.bufferedPosition.inMicroseconds.toDouble()
-            : widget.mediaItem?.duration?.inMicroseconds.toDouble() ?? 0,
-        value: (_dragValue ?? widget.position.inMicroseconds)
-            .clamp(0, widget.mediaItem?.duration?.inMicroseconds.toDouble() ?? 0)
-            .toDouble(),
-        semanticFormatterCallback: (double value) {
-          final positionFullMinutes = Duration(microseconds: value.toInt()).inMinutes % 60;
-          final positionFullHours = Duration(microseconds: value.toInt()).inHours;
-          final positionSeconds = Duration(microseconds: value.toInt()).inSeconds % 60;
-          final durationFullHours = (widget.mediaItem?.duration?.inHours ?? 0);
-          final durationFullMinutes = (widget.mediaItem?.duration?.inMinutes ?? 0) % 60;
-          final durationSeconds = (widget.mediaItem?.duration?.inSeconds ?? 0) % 60;
-          final positionString =
-              "${positionFullHours > 0 ? "$positionFullHours ${AppLocalizations.of(context)!.hours} " : ""}${positionFullMinutes > 0 ? "$positionFullMinutes ${AppLocalizations.of(context)!.minutes} " : ""}$positionSeconds ${AppLocalizations.of(context)!.seconds}";
-          final durationString =
-              "${durationFullHours > 0 ? "$durationFullHours ${AppLocalizations.of(context)!.hours} " : ""}${durationFullMinutes > 0 ? "$durationFullMinutes ${AppLocalizations.of(context)!.minutes} " : ""}$durationSeconds ${AppLocalizations.of(context)!.seconds}";
-          return AppLocalizations.of(context)!.timeFractionTooltip(positionString, durationString);
-        },
-        secondaryTrackValue: widget.mediaItem?.extras?["downloadedTrackPath"] == null
-            ? widget.playbackState.bufferedPosition.inMicroseconds
-                  .clamp(
-                    0.0,
-                    widget.mediaItem?.duration == null
-                        ? widget.playbackState.bufferedPosition.inMicroseconds
-                        : widget.mediaItem?.duration?.inMicroseconds ?? 0,
-                  )
-                  .toDouble()
-            : 0,
-        onChanged: widget.allowSeeking
-            ? (newValue) async {
-                // We don't actually tell audio_service to seek here
-                // because it would get flooded with seek requests
-                setState(() {
-                  _dragValue = newValue;
-                });
-                widget.onDrag(newValue);
-              }
-            : (_) {},
-        onChangeStart: widget.allowSeeking
-            ? (value) {
-                setState(() {
-                  _dragValue = value;
-                });
-                widget.onDrag(value);
-              }
-            : (_) {},
-        onChangeEnd: widget.allowSeeking
-            ? (newValue) async {
-                // Seek to the new position
-                await _audioHandler.seek(Duration(microseconds: newValue.toInt()));
-
-                // Clear drag value so that the slider uses the play
-                // duration again.
-                if (mounted) {
+      child: ExcludeFocus(
+        child: Slider(
+          min: 0.0,
+          max: widget.mediaItem?.duration == null
+              ? widget.playbackState.bufferedPosition.inMicroseconds.toDouble()
+              : widget.mediaItem?.duration?.inMicroseconds.toDouble() ?? 0,
+          value: (_dragValue ?? widget.position.inMicroseconds)
+              .clamp(0, widget.mediaItem?.duration?.inMicroseconds.toDouble() ?? 0)
+              .toDouble(),
+          semanticFormatterCallback: (double value) {
+            final positionFullMinutes = Duration(microseconds: value.toInt()).inMinutes % 60;
+            final positionFullHours = Duration(microseconds: value.toInt()).inHours;
+            final positionSeconds = Duration(microseconds: value.toInt()).inSeconds % 60;
+            final durationFullHours = (widget.mediaItem?.duration?.inHours ?? 0);
+            final durationFullMinutes = (widget.mediaItem?.duration?.inMinutes ?? 0) % 60;
+            final durationSeconds = (widget.mediaItem?.duration?.inSeconds ?? 0) % 60;
+            final positionString =
+                "${positionFullHours > 0 ? "$positionFullHours ${AppLocalizations.of(context)!.hours} " : ""}${positionFullMinutes > 0 ? "$positionFullMinutes ${AppLocalizations.of(context)!.minutes} " : ""}$positionSeconds ${AppLocalizations.of(context)!.seconds}";
+            final durationString =
+                "${durationFullHours > 0 ? "$durationFullHours ${AppLocalizations.of(context)!.hours} " : ""}${durationFullMinutes > 0 ? "$durationFullMinutes ${AppLocalizations.of(context)!.minutes} " : ""}$durationSeconds ${AppLocalizations.of(context)!.seconds}";
+            return AppLocalizations.of(context)!.timeFractionTooltip(positionString, durationString);
+          },
+          secondaryTrackValue: widget.mediaItem?.extras?["downloadedTrackPath"] == null
+              ? widget.playbackState.bufferedPosition.inMicroseconds
+                    .clamp(
+                      0.0,
+                      widget.mediaItem?.duration == null
+                          ? widget.playbackState.bufferedPosition.inMicroseconds
+                          : widget.mediaItem?.duration?.inMicroseconds ?? 0,
+                    )
+                    .toDouble()
+              : 0,
+          onChanged: widget.allowSeeking
+              ? (newValue) async {
+                  // We don't actually tell audio_service to seek here
+                  // because it would get flooded with seek requests
                   setState(() {
-                    _dragValue = null;
+                    _dragValue = newValue;
                   });
+                  widget.onDrag(newValue);
                 }
-                widget.onDrag(null);
-              }
-            : (_) {},
-        autofocus: false,
-        focusNode: FocusNode(skipTraversal: true, canRequestFocus: false),
+              : (_) {},
+          onChangeStart: widget.allowSeeking
+              ? (value) {
+                  setState(() {
+                    _dragValue = value;
+                  });
+                  widget.onDrag(value);
+                }
+              : (_) {},
+          onChangeEnd: widget.allowSeeking
+              ? (newValue) async {
+                  // Seek to the new position
+                  await _audioHandler.seek(Duration(microseconds: newValue.toInt()));
+
+                  // Clear drag value so that the slider uses the play
+                  // duration again.
+                  if (mounted) {
+                    setState(() {
+                      _dragValue = null;
+                    });
+                  }
+                  widget.onDrag(null);
+                }
+              : (_) {},
+          autofocus: false,
+        ),
       ),
     );
   }

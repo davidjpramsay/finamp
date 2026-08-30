@@ -71,28 +71,17 @@ Future<(List<BaseItemDto>, CuratedItemSelectionType, Set<CuratedItemSelectionTyp
         limit: 5,
         includeItemTypes: [BaseItemDtoType.track.jellyfinName].join(","),
       );
-      // For everything except Favorites we can re-use the data from the other provider
-      // The other provider would not limit the favorites but run a separate call anyway
-      // so we would get a lot of overhead and therefore we are just doing it right here
-      final List<BaseItemDto>? topPerformingArtistTracks = (selectionType != CuratedItemSelectionType.favorites)
-          ? await ref.watch(
-              getPerformingArtistTracksProvider(
-                artist: artist,
-                libraryFilter: libraryFilter?.id,
-                genreFilter: genreFilter,
-              ).future,
-            )
-          : await jellyfinApiHelper.getItems(
-              libraryFilter: libraryFilter?.id,
-              parentItem: artist,
-              genreFilter: genreFilter,
-              artistType: ArtistType.artist,
-              sortBy: sortBy.jellyfinName(ContentType.tracks),
-              sortOrder: SortOrder.descending.name,
-              isFavorite: true,
-              limit: 5,
-              includeItemTypes: [BaseItemDtoType.track.jellyfinName].join(","),
-            );
+      final List<BaseItemDto>? topPerformingArtistTracks = await jellyfinApiHelper.getItems(
+        libraryFilter: libraryFilter?.id,
+        parentItem: artist,
+        genreFilter: genreFilter,
+        artistType: ArtistType.artist,
+        sortBy: sortBy.jellyfinName(ContentType.tracks),
+        sortOrder: SortOrder.descending.name,
+        isFavorite: (selectionType == CuratedItemSelectionType.favorites) ? true : null,
+        limit: 5,
+        includeItemTypes: [BaseItemDtoType.track.jellyfinName].join(","),
+      );
 
       final Map<String, BaseItemDto> distinctMap = {
         for (final track in [...?topAlbumArtistTracks, ...?topPerformingArtistTracks]) track.id.toString(): track,
@@ -265,9 +254,9 @@ Future<List<BaseItemDto>> getPerformingArtistTracks(
         onlyFavorites: onlyFavorites,
       );
       // Now we remove every track where the artist is NOT an performing artist...
-      final filteredPerformingArtistTracks = performingArtistAlbumTracks.where((track) {
-        return track.artistItems?.any((artist) => artist.id == artist.id) ?? false;
-      });
+      final filteredPerformingArtistTracks = performingArtistAlbumTracks.where(
+        (track) => trackContainsArtist(track, artist.id),
+      );
       // and add the tracks to the list
       performingArtistTracks.addAll(filteredPerformingArtistTracks);
     }
@@ -285,6 +274,49 @@ Future<List<BaseItemDto>> getPerformingArtistTracks(
     );
     return allPerformingArtistTracks ?? [];
   }
+}
+
+bool trackContainsArtist(BaseItemDto track, BaseItemId artistId) {
+  return track.artistItems?.any((trackArtist) => trackArtist.id == artistId) ?? false;
+}
+
+@riverpod
+Future<({int trackCount, int albumCount})> artistItemCounts(
+  Ref ref, {
+  required BaseItemDto artist,
+  LibraryId? libraryFilter,
+  BaseItemId? genreFilter,
+}) async {
+  if (ref.watch(finampSettingsProvider.isOffline)) {
+    final albumFuture = ref.watch(
+      getArtistAlbumsProvider(artist: artist, libraryFilter: libraryFilter, genreFilter: genreFilter).future,
+    );
+    final trackFuture = ref.watch(
+      getArtistTracksProvider(artist: artist, libraryFilter: libraryFilter, genreFilter: genreFilter).future,
+    );
+    final results = await Future.wait([albumFuture, trackFuture]);
+    return (albumCount: results[0].length, trackCount: results[1].length);
+  }
+
+  final jellyfinApiHelper = GetIt.instance<JellyfinApiHelper>();
+  final albumFuture = jellyfinApiHelper.getItemsWithTotalRecordCount(
+    libraryFilter: libraryFilter?.resolve(ref),
+    parentItem: artist,
+    genreFilter: genreFilter,
+    includeItemTypes: BaseItemDtoType.album.jellyfinName,
+    artistType: ArtistType.albumArtist,
+    limit: 1,
+  );
+  final trackFuture = jellyfinApiHelper.getItemsWithTotalRecordCount(
+    libraryFilter: libraryFilter?.resolve(ref),
+    parentItem: artist,
+    genreFilter: genreFilter,
+    includeItemTypes: BaseItemDtoType.track.jellyfinName,
+    artistType: ArtistType.artist,
+    limit: 1,
+  );
+  final results = await Future.wait([albumFuture, trackFuture]);
+  return (albumCount: results[0].totalRecordCount, trackCount: results[1].totalRecordCount);
 }
 
 // Get all Tracks for playback

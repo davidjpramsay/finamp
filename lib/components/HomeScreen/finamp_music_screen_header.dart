@@ -59,6 +59,7 @@ class FinampMusicScreenHeader extends ConsumerWidget implements PreferredSizeWid
 
   final finampUserHelper = GetIt.instance<FinampUserHelper>();
   final jellyfinApiHelper = GetIt.instance<JellyfinApiHelper>();
+  final downloadsService = GetIt.instance<DownloadsService>();
 
   double get _upperToolbarHeight => kToolbarHeight - 12;
 
@@ -88,6 +89,8 @@ class FinampMusicScreenHeader extends ConsumerWidget implements PreferredSizeWid
         : ref.watch(FinampUserHelper.finampCurrentUserProvider)?.isLocal ?? false
         ? TablerIcons.wifi
         : null; // hide icon by default (remote connection)
+    final isProcessingDownloads =
+        ref.watch(isDownloadingOrSyncingProvider).valueOrNull ?? downloadsService.isProcessing;
 
     void openMenu() async {
       final config = singleTabConfig;
@@ -155,18 +158,14 @@ class FinampMusicScreenHeader extends ConsumerWidget implements PreferredSizeWid
                       padding: const EdgeInsets.only(left: 5.0, right: 3.0, top: 5.0, bottom: 3.0),
                       child: GestureDetector(
                         onTap: openMenu,
-                        onSecondaryTap: ref.watch(isDownloadingOrSyncingPollingProvider)
+                        onSecondaryTap: isProcessingDownloads
                             ? () {
-                                if (ref.read(isDownloadingOrSyncingPollingProvider)) {
-                                  Navigator.of(context).pushNamed(DownloadsScreen.routeName);
-                                }
+                                Navigator.of(context).pushNamed(DownloadsScreen.routeName);
                               }
                             : null,
-                        onLongPress: ref.watch(isDownloadingOrSyncingPollingProvider)
+                        onLongPress: isProcessingDownloads
                             ? () {
-                                if (ref.read(isDownloadingOrSyncingPollingProvider)) {
-                                  Navigator.of(context).pushNamed(DownloadsScreen.routeName);
-                                }
+                                Navigator.of(context).pushNamed(DownloadsScreen.routeName);
                               }
                             : null,
                         child: Stack(
@@ -180,7 +179,7 @@ class FinampMusicScreenHeader extends ConsumerWidget implements PreferredSizeWid
                                   : null,
                             ),
                             Positioned(bottom: -4, right: -2, child: Icon(statusIcon, size: 16)),
-                            if (ref.watch(isDownloadingOrSyncingPollingProvider))
+                            if (isProcessingDownloads)
                               Positioned(
                                 bottom: statusIcon != null ? -6 : 1,
                                 right: statusIcon != null ? -4 : 3,
@@ -343,6 +342,7 @@ class FinampMusicScreenHeader extends ConsumerWidget implements PreferredSizeWid
                       ),
                       IconButton(
                         icon: Icon(TablerIcons.x, size: 22.0, color: ColorScheme.of(context).onPrimaryContainer),
+                        tooltip: context.l10n.close,
                         onPressed: () {
                           FinampSetters.setShowQuickActionsBanner(false);
                         },
@@ -448,14 +448,9 @@ class FinampMusicScreenHeader extends ConsumerWidget implements PreferredSizeWid
   }
 }
 
-final isDownloadingOrSyncingPollingProvider = Provider((Ref ref) {
+final isDownloadingOrSyncingProvider = StreamProvider<bool>((Ref ref) {
   final downloadsService = GetIt.instance<DownloadsService>();
-  // Schedule this provider to be re-polled in 4 seconds
-  Timer(Duration(seconds: 4), ref.invalidateSelf);
-  // TODO do we want to show downloading separate from syncing?
-  return downloadsService.syncBuffer.isRunning ||
-      downloadsService.deleteBuffer.isRunning ||
-      downloadsService.downloadTaskQueue.isRunning;
+  return downloadsService.activityStream;
 });
 
 // Potential drawer button shape.  Currently unused.

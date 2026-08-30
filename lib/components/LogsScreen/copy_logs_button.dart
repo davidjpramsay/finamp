@@ -17,6 +17,7 @@ class _CopyLogsButtonState extends State<CopyLogsButton> {
   Widget build(BuildContext context) {
     return IconButton(
       icon: const Icon(Icons.copy),
+      tooltip: AppLocalizations.of(context)!.copyLogs,
       onPressed: () async {
         final finampLogsHelper = GetIt.instance<FinampLogsHelper>();
 

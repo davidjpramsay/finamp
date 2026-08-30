@@ -68,12 +68,14 @@ class _DownloadedItemTypeListState extends ConsumerState<DownloadedItemsList> {
                         !ref.watch(finampSettingsProvider.isOffline))
                       IconButton(
                         icon: const Icon(Icons.sync),
+                        tooltip: AppLocalizations.of(context)!.syncDownloads,
                         onPressed: () {
                           _downloadsService.resync(stub, null);
                         },
                       ),
                     IconButton(
                       icon: const Icon(Icons.delete),
+                      tooltip: AppLocalizations.of(context)!.deleteFromTargetConfirmButton(""),
                       onPressed: () => askBeforeDeleteDownloadFromDevice(context, stub),
                     ),
                   ],

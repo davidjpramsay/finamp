@@ -75,6 +75,7 @@ class _ArtistScreenContentState extends ConsumerState<ArtistScreenContent> {
     ref.invalidate(getPerformingArtistAlbumsProvider);
     ref.invalidate(getPerformingArtistTracksProvider);
     ref.invalidate(getArtistTracksProvider);
+    ref.invalidate(artistItemCountsProvider);
     _disabledTrackFilters.clear();
   }
 
@@ -160,8 +161,6 @@ class _ArtistScreenContentState extends ConsumerState<ArtistScreenContent> {
 
     final disableDownloads = sortConfig.filters.isNotEmpty;
 
-    List<BaseItemDto> allChildren = [];
-
     /// Similarly to the sections on the genreScreen, we can let the tracks section auto-switch
     /// when there are no items to show for the currently selected type. In this case, the provider
     /// will use the next available filter, fetch its items and return those in addition to a set
@@ -195,9 +194,9 @@ class _ArtistScreenContentState extends ConsumerState<ArtistScreenContent> {
           ),
         )
         .valueOrNull;
-    final allPerformingArtistTracksAsync = ref
+    final artistCounts = ref
         .watch(
-          getPerformingArtistTracksProvider(
+          artistItemCountsProvider(
             artist: widget.parent,
             libraryFilter: widget.library?.id,
             genreFilter: sortConfig.genreFilter?.id,
@@ -205,17 +204,11 @@ class _ArtistScreenContentState extends ConsumerState<ArtistScreenContent> {
         )
         .valueOrNull;
 
-    final allTracks = ref.watch(
-      getArtistTracksProvider(
-        artist: widget.parent,
-        libraryFilter: widget.library?.id,
-        genreFilter: sortConfig.genreFilter?.id,
-        sortAndFilterConfiguration: albumsSortConfig,
-        sortLikeAlbums: true,
-      ).future,
-    );
-
-    final isLoading = topTracksAsync == null || albumArtistAlbumsAsync == null || performingArtistAlbumsAsync == null;
+    final isLoading =
+        topTracksAsync == null ||
+        albumArtistAlbumsAsync == null ||
+        performingArtistAlbumsAsync == null ||
+        artistCounts == null;
 
     /// We add the new disabled filters to our local set, so that we don't accidentally re-enable
     /// previously disabled filters. Only a full refresh of the screen should do that.
@@ -256,11 +249,8 @@ class _ArtistScreenContentState extends ConsumerState<ArtistScreenContent> {
         ? _applySortAndFilterLocally(appearsOnAlbumsList, appearsOnSortConfig)
         : <BaseItemDto>[];
 
-    final allPerformingArtistTracks = allPerformingArtistTracksAsync ?? [];
-
-    // Combine Children to get correct ChildrenCount
-    // for the Download Status Sync Display for Artists
-    allChildren = [...(albumArtistAlbumsAsync ?? []), ...allPerformingArtistTracks];
+    final trackCount = artistCounts?.trackCount ?? 0;
+    final albumCount = artistCounts?.albumCount ?? 0;
 
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -284,8 +274,8 @@ class _ArtistScreenContentState extends ConsumerState<ArtistScreenContent> {
             pinned: true,
             flexibleSpace: ArtistScreenContentFlexibleSpaceBar(
               parentItem: widget.parent,
-              allTracks: allTracks,
-              albumCount: albumArtistAlbums.length,
+              trackCount: trackCount,
+              albumCount: albumCount,
               controller: controller,
             ),
             actions: [
@@ -299,7 +289,8 @@ class _ArtistScreenContentState extends ConsumerState<ArtistScreenContent> {
                       item: widget.parent,
                     ),
                   ),
-                  children: allChildren,
+                  childrenCount: albumCount + trackCount,
+                  trackCount: trackCount,
                   downloadDisabled: disableDownloads,
                   customTooltip: disableDownloads
                       ? AppLocalizations.of(context)!.downloadButtonDisabledGenreFilterTooltip
@@ -307,6 +298,7 @@ class _ArtistScreenContentState extends ConsumerState<ArtistScreenContent> {
                 ),
               IconButton(
                 icon: const Icon(Icons.more_vert),
+                tooltip: AppLocalizations.of(context)!.menuButtonLabel,
                 onPressed: () {
                   openItemMenu(context: context, item: widget.parent);
                 },

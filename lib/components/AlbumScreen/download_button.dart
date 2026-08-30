@@ -22,6 +22,7 @@ class DownloadButton extends ConsumerWidget {
     required this.item,
     this.children,
     this.childrenCount,
+    this.trackCount,
     this.isLibrary = false,
     this.downloadDisabled = false,
     this.customTooltip,
@@ -33,6 +34,7 @@ class DownloadButton extends ConsumerWidget {
   final DownloadStub item;
   final List<BaseItemDto>? children;
   final int? childrenCount;
+  final int? trackCount;
   final bool isLibrary;
   final bool downloadDisabled;
   final String? customTooltip;
@@ -92,13 +94,15 @@ class DownloadButton extends ConsumerWidget {
               ),
             );
           } else {
-            int? trackCount = switch (item.baseItemType) {
-              BaseItemDtoType.album || BaseItemDtoType.playlist => children?.length,
-              BaseItemDtoType.artist ||
-              BaseItemDtoType.genre => children?.fold<int>(0, (count, item) => count + (item.childCount ?? 0)),
-              _ => null,
-            };
-            await DownloadDialog.show(context, item, viewId, trackCount: trackCount);
+            int? resolvedTrackCount =
+                trackCount ??
+                switch (item.baseItemType) {
+                  BaseItemDtoType.album || BaseItemDtoType.playlist => children?.length,
+                  BaseItemDtoType.artist ||
+                  BaseItemDtoType.genre => children?.fold<int>(0, (count, item) => count + (item.childCount ?? 0)),
+                  _ => null,
+                };
+            await DownloadDialog.show(context, item, viewId, trackCount: resolvedTrackCount);
           }
         },
         tooltip: customTooltip ?? parentTooltip,

@@ -89,6 +89,7 @@ void scrollToKey({required GlobalKey key, Duration duration = const Duration(mil
 
 class _QueueListState extends ConsumerState<QueueList> {
   final _queueService = GetIt.instance<QueueService>();
+  late final StreamSubscription<FinampQueueInfo?> _queueSubscription;
 
   QueueItemSource? _source;
   late int _previousTrackCount;
@@ -105,7 +106,7 @@ class _QueueListState extends ConsumerState<QueueList> {
   void initState() {
     super.initState();
 
-    _queueService.getQueueStream().listen((queueInfo) {
+    _queueSubscription = _queueService.getQueueStream().listen((queueInfo) {
       _source = queueInfo?.source;
       _previousTrackCount = queueInfo?.previousTracks.length ?? 0;
     });
@@ -127,6 +128,13 @@ class _QueueListState extends ConsumerState<QueueList> {
         FinampSetters.setPreviousTracksExpanded(true);
         break;
     }
+  }
+
+  @override
+  void dispose() {
+    _queueSubscription.cancel();
+    widget.scrollController.removeListener(_updateJumpToTop);
+    super.dispose();
   }
 
   void _updateJumpToTop() {
@@ -768,6 +776,7 @@ class _CurrentTrackState extends ConsumerState<CurrentTrack> {
                           ),
                           color: Colors.white,
                           child: IconButton(
+                            tooltip: AppLocalizations.of(context)!.togglePlaybackButtonTooltip,
                             onPressed: () {
                               FeedbackHelper.feedback(FeedbackType.selection);
                               _audioHandler.togglePlayback();

@@ -1,20 +1,17 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:file/file.dart' as cache;
-import 'package:file/local.dart';
-// Directly use LocalFile to avoid touching every cached file on initialization
-import 'package:file/src/backends/local/local_file.dart';
 import 'package:finamp/services/theme_provider.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:get_it/get_it.dart';
 import 'package:logging/logging.dart';
-import 'package:path/path.dart' as path_helper;
-import 'package:path_provider/path_provider.dart';
 
 import '../models/jellyfin_models.dart';
 import 'downloads_service.dart';
@@ -46,56 +43,68 @@ class AlbumImageRequest {
   int get hashCode => Object.hash(item.id, maxHeight, maxWidth);
 }
 
-Future<void> initImageCache() async {
-  await _imageCache.config.repo.open();
-  final entries = await _imageCache.config.repo.getAllObjects();
-  final basePath = path_helper.join((await getTemporaryDirectory()).path, _imageCache.config.cacheKey);
-  for (final cacheEntry in entries) {
-    // Directly create FileInfo from cachentry instead of using CacheStore.getFile because that checks for file existence
-    // as it goes, and we do that when the entry is read and can't afford the speed penalty
-    _playerImageCache[cacheEntry.key] = FileInfo(
-      LocalFile(const LocalFileSystem(), File(path_helper.join(basePath, cacheEntry.relativePath))),
-      FileSource.Cache,
-      cacheEntry.validTill,
-      cacheEntry.url,
-    );
-  }
-  await _imageCache.config.repo.close();
-}
-
 final Map<String?, AlbumImageRequest> albumRequestsCache = {};
 
-// This caches mappings between cache keys and files on the player screen, to avoid the async delay of checking if
-// the cached file actually exists when transitioning between non-precached items with identical images.
-final Map<String?, FileInfo?> _playerImageCache = {};
+// Keep only recently used player images in memory. Other files remain available
+// through flutter_cache_manager and are loaded lazily instead of being scanned at startup.
+final LinkedHashMap<String, FileInfo> _playerImageCache = LinkedHashMap();
+const _playerImageCacheLimit = 32;
 
 final _imageCache = DefaultCacheManager();
 
 const _infiniteHeight = 999999;
 
-final AutoDisposeProviderFamily<AlbumImageInfo, AlbumImageRequest>
-albumImageProvider = Provider.autoDispose.family<AlbumImageInfo, AlbumImageRequest>((ref, request) {
-  String? requestCacheKey = request.item.blurHash ?? request.item.imageId;
-  // We currently only support square image requests
-  assert(request.maxWidth == request.maxHeight);
-  if (albumRequestsCache.containsKey(requestCacheKey)) {
-    final cacheRequestHeight = albumRequestsCache[requestCacheKey]!.maxHeight;
-    if ((request.maxHeight ?? _infiniteHeight) > (cacheRequestHeight ?? _infiniteHeight)) {
-      albumRequestsCache[requestCacheKey] = request;
-    }
-  } else {
-    albumRequestsCache[requestCacheKey] = request;
+FileInfo? _getMemoryCachedImage(String key) {
+  final entry = _playerImageCache.remove(key);
+  if (entry == null || !entry.validTill.isAfter(DateTime.now()) || !entry.file.existsSync()) {
+    return null;
   }
-  ref.onDispose(() {
-    if (albumRequestsCache.containsKey(requestCacheKey)) {
-      if (albumRequestsCache[requestCacheKey] == request) {
-        albumRequestsCache.remove(requestCacheKey);
-      }
-    }
-  });
+  _playerImageCache[key] = entry;
+  return entry;
+}
 
+void _rememberPlayerImage(String key, FileInfo file) {
+  _playerImageCache.remove(key);
+  _playerImageCache[key] = file;
+  while (_playerImageCache.length > _playerImageCacheLimit) {
+    _playerImageCache.remove(_playerImageCache.keys.first);
+  }
+}
+
+final albumImageProvider = StateNotifierProvider.autoDispose
+    .family<AlbumImageController, AlbumImageInfo, AlbumImageRequest>((ref, request) {
+      String? requestCacheKey = request.item.blurHash ?? request.item.imageId;
+      // We currently only support square image requests
+      assert(request.maxWidth == request.maxHeight);
+      if (albumRequestsCache.containsKey(requestCacheKey)) {
+        final cacheRequestHeight = albumRequestsCache[requestCacheKey]!.maxHeight;
+        if ((request.maxHeight ?? _infiniteHeight) > (cacheRequestHeight ?? _infiniteHeight)) {
+          albumRequestsCache[requestCacheKey] = request;
+        }
+      } else {
+        albumRequestsCache[requestCacheKey] = request;
+      }
+      ref.onDispose(() {
+        if (albumRequestsCache.containsKey(requestCacheKey)) {
+          if (albumRequestsCache[requestCacheKey] == request) {
+            albumRequestsCache.remove(requestCacheKey);
+          }
+        }
+      });
+
+      final initial = _resolveAlbumImage(ref, request);
+      return AlbumImageController(
+        request: request,
+        initial: initial.$1,
+        imageUrl: initial.$2,
+        key: initial.$3,
+        blurhashKey: initial.$4,
+      );
+    });
+
+(AlbumImageInfo, Uri?, String?, bool) _resolveAlbumImage(Ref ref, AlbumImageRequest request) {
   if (request.item.imageId == null) {
-    return AlbumImageInfo.empty(request);
+    return (AlbumImageInfo.empty(request), null, null, false);
   }
 
   final jellyfinApiHelper = GetIt.instance<JellyfinApiHelper>();
@@ -113,16 +122,15 @@ albumImageProvider = Provider.autoDispose.family<AlbumImageInfo, AlbumImageReque
   }
 
   if (downloadedImage == null) {
-    final cacheEntry = _playerImageCache[key];
-    final isValid = cacheEntry?.validTill.isAfter(DateTime.now()) ?? false;
-    if (isValid && cacheEntry!.file.existsSync()) {
+    final cacheEntry = _getMemoryCachedImage(key);
+    if (cacheEntry != null) {
       downloadedImage = cacheEntry.file;
     }
   }
 
   if (downloadedImage == null) {
     if (ref.watch(finampSettingsProvider.isOffline)) {
-      return AlbumImageInfo.empty(request);
+      return (AlbumImageInfo.empty(request), null, key, blurhashKey);
     }
 
     // TODO maybe we can reuse cached player images or existing sufficiently larger image requests instead of fetching from server
@@ -140,38 +148,23 @@ albumImageProvider = Provider.autoDispose.family<AlbumImageInfo, AlbumImageReque
     }
 
     if (imageUrl == null) {
-      return AlbumImageInfo.empty(request);
+      return (AlbumImageInfo.empty(request), null, key, blurhashKey);
     }
 
     if (request.fullQuality) {
-      // If we want full quality player images, retrieve them via the image cache instead of linking directly.
-      // In most cases, the initial null value will only be seen by the precache logic.
-      Future.sync(() async {
-        FileInfo imageFile = await _imageCache.downloadFile(imageUrl.toString(), key: key);
-        if (blurhashKey) {
-          // The default validTill length is 7 days.  Images fetched by blurhash cannot change, as that would change the
-          // blurhash, so update vaildTill to one year.
-          var cacheObject = await _imageCache.store.retrieveCacheData(key);
-          cacheObject = cacheObject!.copyWith(validTill: DateTime.now().add(Duration(days: 365)));
-          await _imageCache.store.putFile(cacheObject);
-        }
-        _playerImageCache[key] = imageFile;
-        ref.state = AlbumImageInfo(
-          FileImage(imageFile.file, scale: 0.25),
-          request,
-          Uri.file(imageFile.file.path),
-          fullQuality: true,
-        );
-      });
-      // Temporary result for the frame or so the cache loads
-      return AlbumImageInfo(null, request, null, fullQuality: true);
+      return (AlbumImageInfo(null, request, null, fullQuality: true), imageUrl, key, blurhashKey);
     } else {
       // Allow drawing albums up to 4X intrinsic size by setting scale
-      return AlbumImageInfo(
-        CachedImage(NetworkImage(imageUrl.toString(), scale: 0.25), key),
-        request,
-        imageUrl,
-        fullQuality: request.fullQuality,
+      return (
+        AlbumImageInfo(
+          CachedImage(NetworkImage(imageUrl.toString(), scale: 0.25), key),
+          request,
+          imageUrl,
+          fullQuality: request.fullQuality,
+        ),
+        null,
+        key,
+        blurhashKey,
       );
     }
   }
@@ -186,8 +179,71 @@ albumImageProvider = Provider.autoDispose.family<AlbumImageInfo, AlbumImageReque
     // NetworkImages fetched with display size
     out = ResizeImage(out, width: request.maxWidth! * 2, height: request.maxHeight! * 2, policy: ResizeImagePolicy.fit);
   }
-  return AlbumImageInfo(out, request, Uri.file(downloadedImage.path), fullQuality: request.fullQuality);
-});
+  return (
+    AlbumImageInfo(out, request, Uri.file(downloadedImage.path), fullQuality: request.fullQuality),
+    null,
+    key,
+    blurhashKey,
+  );
+}
+
+class AlbumImageController extends StateNotifier<AlbumImageInfo> {
+  AlbumImageController({
+    required this.request,
+    required AlbumImageInfo initial,
+    required Uri? imageUrl,
+    required String? key,
+    required bool blurhashKey,
+  }) : super(initial) {
+    if (imageUrl != null && key != null) {
+      unawaited(_loadFullQualityImage(imageUrl, key, blurhashKey));
+    }
+  }
+
+  final AlbumImageRequest request;
+
+  Future<void> _loadFullQualityImage(Uri imageUrl, String key, bool blurhashKey) async {
+    try {
+      var imageFile = _getMemoryCachedImage(key) ?? await _imageCache.getFileFromCache(key);
+      final cachedFileIsValid =
+          imageFile != null && imageFile.validTill.isAfter(DateTime.now()) && imageFile.file.existsSync();
+      if (!cachedFileIsValid) {
+        imageFile = await _imageCache.downloadFile(imageUrl.toString(), key: key);
+        if (blurhashKey) {
+          // Images addressed by blurhash are immutable, so retain them longer.
+          var cacheObject = await _imageCache.store.retrieveCacheData(key);
+          if (cacheObject != null) {
+            cacheObject = cacheObject.copyWith(validTill: DateTime.now().add(const Duration(days: 365)));
+            await _imageCache.store.putFile(cacheObject);
+          }
+        }
+      }
+      _rememberPlayerImage(key, imageFile!);
+      _publish(
+        AlbumImageInfo(
+          FileImage(imageFile.file, scale: 0.25),
+          request,
+          Uri.file(imageFile.file.path),
+          fullQuality: true,
+        ),
+      );
+    } catch (error, stackTrace) {
+      albumImageProviderLogger.warning("Failed to load full-quality artwork for ${request.item.id}", error, stackTrace);
+    }
+  }
+
+  void _publish(AlbumImageInfo image) {
+    if (!mounted) return;
+    final schedulerPhase = SchedulerBinding.instance.schedulerPhase;
+    if (schedulerPhase == SchedulerPhase.idle || schedulerPhase == SchedulerPhase.postFrameCallbacks) {
+      state = image;
+      return;
+    }
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (mounted) state = image;
+    });
+  }
+}
 
 class CachedImage extends ImageProvider<CachedImage> {
   CachedImage(ImageProvider base, this.cacheKey) : _base = base;

@@ -1084,6 +1084,22 @@ class TrackListItemTile extends ConsumerWidget {
                       onRemoveFromList?.call();
                     },
                   ),
+                if (features.contains(TrackListItemFeatures.swipeableInQueue) &&
+                    ref.watch(finampSettingsProvider.disableGesture) &&
+                    onRemoveFromList != null)
+                  IconButton(
+                    visualDensity: const VisualDensity(horizontal: -4),
+                    icon: Icon(
+                      TablerIcons.x,
+                      color: Theme.of(context).textTheme.bodyMedium?.color ?? Colors.white,
+                      size: 24,
+                    ),
+                    tooltip: AppLocalizations.of(context)!.removeFromQueue,
+                    onPressed: () {
+                      FeedbackHelper.feedback(FeedbackType.heavy);
+                      onRemoveFromList?.call();
+                    },
+                  ),
                 if (features.contains(TrackListItemFeatures.restoreButton))
                   IconButton(
                     visualDensity: VisualDensity(horizontal: -4),

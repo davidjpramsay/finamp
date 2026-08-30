@@ -92,8 +92,8 @@ class QueueService {
   int? _activeInitialIndex;
 
   // Flags for saving and loading saved queues
-  int _saveUpdateCycleCount = 0;
-  bool _saveUpdateImmediate = false;
+  Timer? _periodicPositionSaveTimer;
+  Timer? _debouncedPositionSaveTimer;
   SavedQueueState _savedQueueState = SavedQueueState.preInit;
   FinampStorableQueueInfo? _failedSavedQueue;
   static const int _maxSavedQueues = 60;
@@ -129,30 +129,17 @@ class QueueService {
       if (_audioHandler.audioSources.isNotEmpty && (previousIndex != _currentQueueIndex || _currentTrack == null)) {
         _queueServiceLogger.finer("Play queue index changed, new index: $_currentQueueIndex");
         _buildQueueFromNativePlayerQueue();
-      } else {
-        _saveUpdateImmediate = true;
       }
-    });
 
-    Stream<void>.periodic(const Duration(seconds: 10)).listen((event) {
-      // Update once per minute while playing in background, and up to once every ten seconds if
-      // pausing/seeking is occurring
-      // We also update on every track switch.
-      if ((_saveUpdateCycleCount >= 5 && !_audioHandler.paused) || _saveUpdateImmediate) {
-        if (_savedQueueState == SavedQueueState.pendingSave && !_audioHandler.paused) {
-          _savedQueueState = SavedQueueState.saving;
-        }
-        if (_savedQueueState == SavedQueueState.saving) {
-          _saveUpdateImmediate = false;
-          _saveUpdateCycleCount = 0;
-          final info = _saveCurrentQueue(withPosition: true);
-          _queueServiceLogger.finest("Saved new periodic queue $info");
-        }
+      if (event.playing) {
+        _periodicPositionSaveTimer ??= Timer.periodic(const Duration(minutes: 1), (_) => _savePositionIfNeeded());
       } else {
-        _saveUpdateCycleCount++;
+        _periodicPositionSaveTimer?.cancel();
+        _periodicPositionSaveTimer = null;
       }
-      // just in case, check if there are radio tracks missing (due to errors, race conditions, etc.)
-      unawaited(maybeAddRadioTracks());
+
+      _debouncedPositionSaveTimer?.cancel();
+      _debouncedPositionSaveTimer = Timer(const Duration(seconds: 2), _savePositionIfNeeded);
     });
 
     // check if new radio tracks are needed whenever the queue changes in some way
@@ -324,8 +311,6 @@ class QueueService {
     if (_savedQueueState == SavedQueueState.saving) {
       _saveCurrentQueue(withPosition: false);
       _queueServiceLogger.finest("Saved new rebuilt queue");
-      _saveUpdateImmediate = false;
-      _saveUpdateCycleCount = 0;
     }
 
     if (logUpdate) {
@@ -345,16 +330,16 @@ class QueueService {
       final excess = queueToSave.fullQueue.length - maxQueueItems;
       // create a copy of previous tracks to avoid modifying the original list, which is tied directly to Finamp's internal queue
       var trimmedPreviousTracks = [...queueToSave.previousTracks];
-      List<int> indicesToRemove = [];
+      final Set<int> indicesToRemove = {};
       trimmedPreviousTracks.forEachIndexed((index, e) {
         if (indicesToRemove.length < excess && [QueueItemSourceType.radio].contains(e.source.type)) {
           indicesToRemove.add(index);
         }
       });
       if (indicesToRemove.isNotEmpty) {
-        final List<int> shuffleIndicesToRemove;
+        final Set<int> shuffleIndicesToRemove;
         if (playbackOrder == FinampPlaybackOrder.shuffled) {
-          shuffleIndicesToRemove = indicesToRemove.map((x) => shuffleIndices[x]).toList();
+          shuffleIndicesToRemove = indicesToRemove.map((x) => shuffleIndices[x]).toSet();
         } else {
           shuffleIndicesToRemove = indicesToRemove;
         }
@@ -365,9 +350,12 @@ class QueueService {
         shuffleIndices = shuffleIndices.map((x) => shuffleIndicesToRemove.contains(x) ? null : x).nonNulls.toList();
         queueToSave.previousTracks = trimmedPreviousTracks;
         // repair shuffle indices to close "gaps"
+        final removedBeforeIndex = List<int>.filled(queueToSave.trackCount + shuffleIndicesToRemove.length + 1, 0);
+        for (var i = 0; i < removedBeforeIndex.length - 1; i++) {
+          removedBeforeIndex[i + 1] = removedBeforeIndex[i] + (shuffleIndicesToRemove.contains(i) ? 1 : 0);
+        }
         for (int i = 0; i < shuffleIndices.length; i++) {
-          int removedBefore = shuffleIndicesToRemove.where((x) => x < shuffleIndices[i]).length;
-          shuffleIndices[i] = shuffleIndices[i] - removedBefore;
+          shuffleIndices[i] = shuffleIndices[i] - removedBeforeIndex[shuffleIndices[i]];
         }
       }
     }
@@ -378,8 +366,18 @@ class QueueService {
       playbackOrder,
       shuffleIndices,
     );
-    _queuesBox.put("latest", info);
+    unawaited(_queuesBox.put("latest", info));
     return info;
+  }
+
+  void _savePositionIfNeeded() {
+    if (_savedQueueState == SavedQueueState.pendingSave && !_audioHandler.paused) {
+      _savedQueueState = SavedQueueState.saving;
+    }
+    if (_savedQueueState == SavedQueueState.saving) {
+      final info = _saveCurrentQueue(withPosition: true);
+      _queueServiceLogger.finest("Saved queue playback position $info");
+    }
   }
 
   Future<void> performInitialQueueLoad() async {

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:finamp/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -11,24 +9,25 @@ import '../global_snackbar.dart';
 
 const double downloadsOverviewCardLoadingHeight = 120;
 
-class DownloadsOverview extends StatelessWidget {
+class DownloadsOverview extends StatefulWidget {
   const DownloadsOverview({super.key});
 
   @override
+  State<DownloadsOverview> createState() => _DownloadsOverviewState();
+}
+
+class _DownloadsOverviewState extends State<DownloadsOverview> {
+  late final DownloadsService downloadsService;
+
+  @override
+  void initState() {
+    super.initState();
+    downloadsService = GetIt.instance<DownloadsService>();
+    WidgetsBinding.instance.addPostFrameCallback((_) => downloadsService.restartDownloads());
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final downloadsService = GetIt.instance<DownloadsService>();
-
-    downloadsService.updateDownloadCounts();
-    downloadsService.restartDownloads();
-    Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (context.mounted) {
-        downloadsService.updateDownloadCounts();
-      } else {
-        timer.cancel();
-      }
-    });
-
-    // This is refreshed once every 4 seconds by above timer
     return StreamBuilder<Map<String, int>>(
       stream: downloadsService.downloadCountsStream,
       initialData: downloadsService.downloadCounts,

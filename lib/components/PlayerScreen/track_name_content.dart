@@ -43,10 +43,8 @@ class TrackNameContent extends ConsumerWidget {
             child: Consumer(
               builder: (context, ref, _) {
                 final text = currentTrack.item.title;
-                // TODO properly scale in player screen controller?
-                final isTwoLineMode =
-                    controller.shouldShow(PlayerHideable.twoLineTitle) &&
-                    !(MediaQuery.textScalerOf(context).scale(18) > 18 * 1.11);
+                final textScaler = MediaQuery.textScalerOf(context);
+                final isTwoLineMode = controller.shouldShow(PlayerHideable.twoLineTitle);
 
                 final textStyle = TextStyle(
                   fontSize: 18,
@@ -55,8 +53,13 @@ class TrackNameContent extends ConsumerWidget {
                 );
 
                 final textSpan = TextSpan(text: text, style: textStyle);
-                final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr, maxLines: 2)
-                  ..layout(maxWidth: 280);
+                final textPainter = TextPainter(
+                  text: textSpan,
+                  textDirection: TextDirection.ltr,
+                  textScaler: textScaler,
+                  maxLines: 2,
+                )..layout(maxWidth: 280);
+                final scaledLineHeight = textScaler.scale(18) * 1.2;
 
                 final wouldOverflow = textPainter.didExceedMaxLines;
                 textPainter.dispose();
@@ -73,7 +76,7 @@ class TrackNameContent extends ConsumerWidget {
                   if (wouldOverflow && ref.watch(finampSettingsProvider.oneLineMarqueeTextButton)) {
                     return SizedBox(
                       width: 280,
-                      height: 30,
+                      height: scaledLineHeight + 8,
                       child: ScrollingTextHelper(
                         id: ValueKey(currentTrack.item.id),
                         text: text,
@@ -83,7 +86,7 @@ class TrackNameContent extends ConsumerWidget {
                     );
                   } else {
                     return SizedBox(
-                      height: 46.0,
+                      height: scaledLineHeight * 2 + 4,
                       child: Center(
                         child: Text(
                           text,

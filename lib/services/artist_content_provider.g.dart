@@ -12,7 +12,7 @@ part of 'artist_content_provider.dart';
 // **************************************************************************
 
 String _$getArtistTracksSectionHash() =>
-    r'568e17b713d1e4f47ad71d50093f0c887743145c';
+    r'1c4c9b540886ca1474d0c1eed7d33f3c88dc152c';
 
 /// Copied from Dart SDK
 class _SystemHash {
@@ -649,7 +649,7 @@ class _GetPerformingArtistAlbumsProviderElement
 }
 
 String _$getPerformingArtistTracksHash() =>
-    r'2bf1c967f60b7500e63aa849972e549497b43356';
+    r'14274b670426b3c19d9392cf0e91ded75589bb52';
 
 /// See also [getPerformingArtistTracks].
 @ProviderFor(getPerformingArtistTracks)
@@ -834,6 +834,178 @@ class _GetPerformingArtistTracksProviderElement
   @override
   bool get onlyFavorites =>
       (origin as GetPerformingArtistTracksProvider).onlyFavorites;
+}
+
+String _$artistItemCountsHash() => r'6c91825eb3d7d8d4b3251a322cb9fb34d3c5f2f8';
+
+/// See also [artistItemCounts].
+@ProviderFor(artistItemCounts)
+const artistItemCountsProvider = ArtistItemCountsFamily();
+
+/// See also [artistItemCounts].
+class ArtistItemCountsFamily
+    extends Family<AsyncValue<({int trackCount, int albumCount})>> {
+  /// See also [artistItemCounts].
+  const ArtistItemCountsFamily();
+
+  /// See also [artistItemCounts].
+  ArtistItemCountsProvider call({
+    required BaseItemDto artist,
+    LibraryId? libraryFilter,
+    BaseItemId? genreFilter,
+  }) {
+    return ArtistItemCountsProvider(
+      artist: artist,
+      libraryFilter: libraryFilter,
+      genreFilter: genreFilter,
+    );
+  }
+
+  @override
+  ArtistItemCountsProvider getProviderOverride(
+    covariant ArtistItemCountsProvider provider,
+  ) {
+    return call(
+      artist: provider.artist,
+      libraryFilter: provider.libraryFilter,
+      genreFilter: provider.genreFilter,
+    );
+  }
+
+  static const Iterable<ProviderOrFamily>? _dependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
+
+  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
+      _allTransitiveDependencies;
+
+  @override
+  String? get name => r'artistItemCountsProvider';
+}
+
+/// See also [artistItemCounts].
+class ArtistItemCountsProvider
+    extends AutoDisposeFutureProvider<({int trackCount, int albumCount})> {
+  /// See also [artistItemCounts].
+  ArtistItemCountsProvider({
+    required BaseItemDto artist,
+    LibraryId? libraryFilter,
+    BaseItemId? genreFilter,
+  }) : this._internal(
+         (ref) => artistItemCounts(
+           ref as ArtistItemCountsRef,
+           artist: artist,
+           libraryFilter: libraryFilter,
+           genreFilter: genreFilter,
+         ),
+         from: artistItemCountsProvider,
+         name: r'artistItemCountsProvider',
+         debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+             ? null
+             : _$artistItemCountsHash,
+         dependencies: ArtistItemCountsFamily._dependencies,
+         allTransitiveDependencies:
+             ArtistItemCountsFamily._allTransitiveDependencies,
+         artist: artist,
+         libraryFilter: libraryFilter,
+         genreFilter: genreFilter,
+       );
+
+  ArtistItemCountsProvider._internal(
+    super._createNotifier, {
+    required super.name,
+    required super.dependencies,
+    required super.allTransitiveDependencies,
+    required super.debugGetCreateSourceHash,
+    required super.from,
+    required this.artist,
+    required this.libraryFilter,
+    required this.genreFilter,
+  }) : super.internal();
+
+  final BaseItemDto artist;
+  final LibraryId? libraryFilter;
+  final BaseItemId? genreFilter;
+
+  @override
+  Override overrideWith(
+    FutureOr<({int trackCount, int albumCount})> Function(
+      ArtistItemCountsRef provider,
+    )
+    create,
+  ) {
+    return ProviderOverride(
+      origin: this,
+      override: ArtistItemCountsProvider._internal(
+        (ref) => create(ref as ArtistItemCountsRef),
+        from: from,
+        name: null,
+        dependencies: null,
+        allTransitiveDependencies: null,
+        debugGetCreateSourceHash: null,
+        artist: artist,
+        libraryFilter: libraryFilter,
+        genreFilter: genreFilter,
+      ),
+    );
+  }
+
+  @override
+  AutoDisposeFutureProviderElement<({int trackCount, int albumCount})>
+  createElement() {
+    return _ArtistItemCountsProviderElement(this);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is ArtistItemCountsProvider &&
+        other.artist == artist &&
+        other.libraryFilter == libraryFilter &&
+        other.genreFilter == genreFilter;
+  }
+
+  @override
+  int get hashCode {
+    var hash = _SystemHash.combine(0, runtimeType.hashCode);
+    hash = _SystemHash.combine(hash, artist.hashCode);
+    hash = _SystemHash.combine(hash, libraryFilter.hashCode);
+    hash = _SystemHash.combine(hash, genreFilter.hashCode);
+
+    return _SystemHash.finish(hash);
+  }
+}
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+mixin ArtistItemCountsRef
+    on AutoDisposeFutureProviderRef<({int trackCount, int albumCount})> {
+  /// The parameter `artist` of this provider.
+  BaseItemDto get artist;
+
+  /// The parameter `libraryFilter` of this provider.
+  LibraryId? get libraryFilter;
+
+  /// The parameter `genreFilter` of this provider.
+  BaseItemId? get genreFilter;
+}
+
+class _ArtistItemCountsProviderElement
+    extends AutoDisposeFutureProviderElement<({int trackCount, int albumCount})>
+    with ArtistItemCountsRef {
+  _ArtistItemCountsProviderElement(super.provider);
+
+  @override
+  BaseItemDto get artist => (origin as ArtistItemCountsProvider).artist;
+  @override
+  LibraryId? get libraryFilter =>
+      (origin as ArtistItemCountsProvider).libraryFilter;
+  @override
+  BaseItemId? get genreFilter =>
+      (origin as ArtistItemCountsProvider).genreFilter;
 }
 
 String _$getArtistTracksHash() => r'be6bc9a56a6900f1a5b60eea9d1e745dfb0d89d9';

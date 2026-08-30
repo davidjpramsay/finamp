@@ -20,7 +20,6 @@ class ItemAmount extends ConsumerWidget {
         label: itemCount.hasValue
             ? AppLocalizations.of(context)!.itemCount(itemCount.value!.$2.name, itemCount.value!.$1)
             : AppLocalizations.of(context)!.itemCountCalculating,
-        button: true,
       ),
       excludeSemantics: true,
       container: true,

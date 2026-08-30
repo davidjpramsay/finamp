@@ -61,6 +61,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             container: true,
             child: IconButton(
               icon: const Icon(Icons.info),
+              tooltip: AppLocalizations.of(context)!.about,
               onPressed: () async {
                 final localizations = AppLocalizations.of(context)!;
                 final applicationLegalese = AppLocalizations.of(context)!.applicationLegalese(repoLink);

@@ -350,18 +350,8 @@ Future<void> _setupProviders() async {
   container.listen(finampSettingsProvider, (_, _) {});
   await container.read(finampSettingsProvider.future);
 
-  await initImageCache();
-
   DataSourceService.create();
   AutoOffline.startWatching();
-
-  unawaited(
-    Stream<void>.periodic(Duration(seconds: 1)).forEach((_) {
-      if (!SchedulerBinding.instance.framesEnabled) {
-        (providerScopeKey.currentContext as InheritedElement?)?.build();
-      }
-    }),
-  );
 }
 
 Future<void> _setupOSIntegration(List<String> commandLineArgs) async {

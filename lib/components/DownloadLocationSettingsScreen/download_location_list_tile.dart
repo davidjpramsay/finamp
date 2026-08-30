@@ -33,6 +33,7 @@ class DownloadLocationListTile extends ConsumerWidget {
           if (downloadLocation.baseDirectory.needsPath)
             IconButton(
               icon: const Icon(Icons.delete),
+              tooltip: AppLocalizations.of(context)!.deleteDownloadLocation,
               onPressed: () => showDialog(
                 context: context,
                 builder: (context) => DownloadLocationDeleteDialog(id: downloadLocation.id),

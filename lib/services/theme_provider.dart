@@ -10,6 +10,7 @@ import 'package:finamp/services/queue_service.dart';
 import 'package:flutter/material.dart' hide Image;
 import 'package:flutter_blurhash/flutter_blurhash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:logging/logging.dart';
@@ -167,8 +168,13 @@ FinampThemeImage themeImage(Ref ref, ThemeInfo request) {
 
 @riverpod
 class FinampThemeFromImage extends _$FinampThemeFromImage {
+  int _generation = 0;
+  bool _disposed = false;
+
   @override
   ColorScheme build(ThemeColorRequest theme) {
+    final generation = ++_generation;
+    ref.onDispose(() => _disposed = true);
     var brightness = ref.watch(brightnessProvider);
     if (theme.image == null) {
       return getGrayTheme(brightness);
@@ -202,8 +208,20 @@ class FinampThemeFromImage extends _$FinampThemeFromImage {
       }
       themeProviderLogger.finer("Calculated theme color ${colors.highlight} for image $image");
       return _getColorScheme(colors, brightness);
-    }).then((value) => state = value);
+    }).then((value) => _publish(value, generation));
     return getGrayTheme(brightness);
+  }
+
+  void _publish(ColorScheme value, int generation) {
+    if (_disposed || generation != _generation) return;
+    final schedulerPhase = SchedulerBinding.instance.schedulerPhase;
+    if (schedulerPhase == SchedulerPhase.idle || schedulerPhase == SchedulerPhase.postFrameCallbacks) {
+      state = value;
+      return;
+    }
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!_disposed && generation == _generation) state = value;
+    });
   }
 
   RawThemeResult? _getImageTheme(String? blurHash) {

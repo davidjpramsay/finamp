@@ -292,11 +292,13 @@ class IsarTaskQueue implements TaskQueue {
     }
     try {
       _callbacksComplete = Completer();
+      _downloadsService.notifyActivityChanged();
       unawaited(_advanceQueue());
       await _callbacksComplete!.future;
       _enqueueLog.info("All downloads enqueued.");
     } finally {
       _callbacksComplete = null;
+      _downloadsService.notifyActivityChanged();
     }
   }
 
@@ -469,11 +471,13 @@ class DownloadsDeleteService {
     try {
       _activeDeletes.clear();
       _callbacksComplete = Completer();
+      _downloadsService.notifyActivityChanged();
       unawaited(_advanceQueue());
       await _callbacksComplete!.future;
       _deleteLogger.info("All deletes complete.");
     } finally {
       _callbacksComplete = null;
+      _downloadsService.notifyActivityChanged();
     }
   }
 
@@ -732,6 +736,7 @@ class DownloadsSyncService {
       _metadataCache = {};
       _childCache = {};
       _callbacksComplete = Completer();
+      _downloadsService.notifyActivityChanged();
       _missingItemExceptions = 0;
       unawaited(_advanceQueue());
       await _callbacksComplete!.future;
@@ -741,6 +746,7 @@ class DownloadsSyncService {
       }
     } finally {
       _callbacksComplete = null;
+      _downloadsService.notifyActivityChanged();
     }
   }
 

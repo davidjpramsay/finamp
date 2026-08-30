@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:finamp/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blurhash/flutter_blurhash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -96,8 +97,13 @@ class _AlbumImageState extends ConsumerState<AlbumImage> {
     final content = ClipRRect(borderRadius: borderRadius, child: _buildContent());
 
     return Semantics(
-      // label: item?.name != null ? AppLocalizations.of(context)!.artworkTooltip(item!.name!) : AppLocalizations.of(context)!.artwork, // removed to reduce screen reader verbosity
-      excludeSemantics: true,
+      label: widget.tapToZoom
+          ? widget.item?.name != null
+                ? AppLocalizations.of(context)!.artworkTooltip(widget.item!.name!)
+                : AppLocalizations.of(context)!.artwork
+          : null,
+      button: widget.tapToZoom,
+      excludeSemantics: !widget.tapToZoom,
       child: AspectRatio(aspectRatio: 1.0, child: widget.onZoomRoute ? content : Align(child: content)),
     );
   }
@@ -366,6 +372,7 @@ class _ZoomedImage extends StatelessWidget {
           child: SafeArea(
             child: IconButton(
               icon: const Icon(TablerIcons.x),
+              tooltip: AppLocalizations.of(context)!.close,
               color: Colors.white,
               iconSize: 32.0,
               onPressed: () {
