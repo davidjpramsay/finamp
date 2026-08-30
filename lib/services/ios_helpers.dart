@@ -20,7 +20,7 @@ final _logger = Logger('IosHelpers');
 /// play/pause state when playback is started from the phone.
 /// Consider contributing a fix upstream to audio_service.
 class IosPlaybackStateSync {
-  static const _channel = MethodChannel('com.unicornsonlsd.finamp-ios/playback_state');
+  static const _channel = MethodChannel('com.davidjpramsay.finampnight/playback_state');
 
   /// Sets the playback state on iOS's MPNowPlayingInfoCenter.
   /// This is needed for CarPlay to show the correct play/pause state.
@@ -41,7 +41,7 @@ class IosPlaybackStateSync {
 /// This enables voice commands like "Hey Siri, play [track/artist] on Finamp"
 /// from anywhere on iOS (phone, CarPlay, AirPods, etc.).
 class IosSiriHandler {
-  static const _siriIntentChannel = MethodChannel('com.unicornsonlsd.finamp-ios/siri_intent');
+  static const _siriIntentChannel = MethodChannel('com.davidjpramsay.finampnight/siri_intent');
 
   /// Sets up the method channel handler for Siri media intents.
   /// Should be called once during app initialization.
