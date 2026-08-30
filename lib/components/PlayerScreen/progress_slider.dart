@@ -141,6 +141,8 @@ class _ProgressSliderDuration extends StatelessWidget {
           printDuration(currentPosition),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             height: 0.5, // reduce line height
+            color: Theme.of(context).colorScheme.secondary,
+            fontFamily: 'monospace',
             fontFeatures: const [
               // fixed-width digits
               FontFeature.tabularFigures(),
@@ -155,6 +157,8 @@ class _ProgressSliderDuration extends StatelessWidget {
           ),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             height: 0.5, // reduce line height
+            color: Theme.of(context).colorScheme.secondary,
+            fontFamily: 'monospace',
             fontFeatures: const [
               // fixed-width digits
               FontFeature.tabularFigures(),
@@ -197,15 +201,15 @@ class __PlaybackProgressSliderState extends ConsumerState<_PlaybackProgressSlide
       data: widget.allowSeeking
           // ? _sliderThemeData.copyWith(
           ? SliderTheme.of(context).copyWith(
-              inactiveTrackColor: IconTheme.of(context).color!.withOpacity(0.35),
-              secondaryActiveTrackColor: IconTheme.of(context).color!.withOpacity(0.6),
+              inactiveTrackColor: IconTheme.of(context).color!.withValues(alpha: 0.35),
+              secondaryActiveTrackColor: IconTheme.of(context).color!.withValues(alpha: 0.6),
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
             )
           // )
           // : _sliderThemeData.copyWith(
           : SliderTheme.of(context).copyWith(
-              inactiveTrackColor: IconTheme.of(context).color!.withOpacity(0.35),
-              secondaryActiveTrackColor: IconTheme.of(context).color!.withOpacity(0.6),
+              inactiveTrackColor: IconTheme.of(context).color!.withValues(alpha: 0.35),
+              secondaryActiveTrackColor: IconTheme.of(context).color!.withValues(alpha: 0.6),
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0.1),
               // gets rid of both horizontal and vertical padding
               overlayShape: const RoundSliderOverlayShape(overlayRadius: 0.1),

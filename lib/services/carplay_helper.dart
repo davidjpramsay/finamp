@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:finamp/components/MusicScreen/sort_and_filter_row.dart';
 import 'package:finamp/components/global_snackbar.dart';
@@ -11,6 +12,7 @@ import 'package:finamp/services/music_screen_provider.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_carplay/flutter_carplay.dart';
+import 'package:flutter_carplay/models/template.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:finamp/models/finamp_models.dart';
@@ -44,6 +46,8 @@ const _carPlayRecentlyAddedLimit = 3;
 
 /// Tracks shown in the CarPlay home Recently Played row.
 const _carPlayRecentlyPlayedLimit = 5;
+
+const _nightDriveArtwork = 'assets/carplay/night_drive.png';
 
 class CarPlayHelper {
   static const MethodChannel _carPlayUiChannel = MethodChannel('finamp/carplay_ui');
@@ -565,17 +569,63 @@ class CarPlayHelper {
       );
     }
 
-    await FlutterCarplay.setRootTemplate(
-      rootTemplate: CPTabBarTemplate(
-        templates: [
-          CPListTemplate(
-            sections: homeSections,
-            title: GlobalSnackbar.requireL10n.home,
-            emptyViewTitleVariants: [GlobalSnackbar.requireL10n.home],
-            emptyViewSubtitleVariants: [GlobalSnackbar.requireL10n.notAvailable],
-            systemIcon: 'music.note.house',
-            sectionIndexEnabled: false,
+    final homeTemplate = CPListTemplate(
+      sections: homeSections,
+      title: 'NIGHT RADIO',
+      emptyViewTitleVariants: [GlobalSnackbar.requireL10n.home],
+      emptyViewSubtitleVariants: [GlobalSnackbar.requireL10n.notAvailable],
+      systemIcon: 'waveform',
+      sectionIndexEnabled: false,
+    );
+    final libraryTemplate = CPListTemplate(
+      sections: [librarySection],
+      title: GlobalSnackbar.requireL10n.library,
+      emptyViewTitleVariants: [GlobalSnackbar.requireL10n.library],
+      emptyViewSubtitleVariants: [GlobalSnackbar.requireL10n.emptyFilteredListTitle],
+      systemIcon: 'square.stack.3d.up.fill',
+    );
+
+    final CPTemplate rootTemplate;
+    if (Platform.isIOS) {
+      final currentTrack = _queueService.getCurrentTrack();
+      final nowPlayingArtwork = currentTrack == null ? null : _getCarPlayImageUri(currentTrack.baseItem);
+      rootTemplate = CPGridTemplate(
+        title: 'FINAMP // NIGHT DRIVE',
+        buttons: [
+          CPGridButton(
+            titleVariants: const ['NOW PLAYING', 'PLAYING'],
+            image: nowPlayingArtwork ?? _nightDriveArtwork,
+            onPress: () => unawaited(FlutterCarplay.showSharedNowPlaying()),
           ),
+          CPGridButton(
+            titleVariants: const ['NIGHT MIX', 'MIX'],
+            image: _nightDriveArtwork,
+            onPress: () => unawaited(() async {
+              await shuffleAllTracks();
+              await FlutterCarplay.showSharedNowPlaying();
+            }()),
+          ),
+          CPGridButton(
+            titleVariants: const ['RECENTS', 'RECENT'],
+            image: 'assets/icon/icon_combined.png',
+            onPress: () => unawaited(FlutterCarplay.push(template: homeTemplate)),
+          ),
+          CPGridButton(
+            titleVariants: const ['UP NEXT', 'QUEUE'],
+            image: 'images/album_white.png',
+            onPress: () => unawaited(showUpNextTemplate()),
+          ),
+          CPGridButton(
+            titleVariants: const ['LIBRARY'],
+            image: 'images/finamp.png',
+            onPress: () => unawaited(FlutterCarplay.push(template: libraryTemplate)),
+          ),
+        ],
+      );
+    } else {
+      rootTemplate = CPTabBarTemplate(
+        templates: [
+          homeTemplate,
           CPListTemplate(
             sections: [],
             title: GlobalSnackbar.requireL10n.search,
@@ -583,16 +633,12 @@ class CarPlayHelper {
             emptyViewSubtitleVariants: [GlobalSnackbar.requireL10n.carPlaySiriHint],
             systemIcon: 'mic',
           ),
-          CPListTemplate(
-            sections: [librarySection],
-            title: GlobalSnackbar.requireL10n.library,
-            emptyViewTitleVariants: [GlobalSnackbar.requireL10n.library],
-            emptyViewSubtitleVariants: [GlobalSnackbar.requireL10n.emptyFilteredListTitle],
-            systemIcon: 'play.square.stack',
-          ),
+          libraryTemplate,
         ],
-      ),
-    );
+      );
+    }
+
+    await FlutterCarplay.setRootTemplate(rootTemplate: rootTemplate);
 
     await _flutterCarplay.forceUpdateRootTemplate();
   }

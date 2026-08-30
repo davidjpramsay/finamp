@@ -1,12 +1,10 @@
-import 'dart:io';
 import 'dart:math';
 
 import 'package:finamp/components/HomeScreen/finamp_music_screen_header.dart';
 import 'package:finamp/components/MusicScreen/offline_mode_status_label.dart';
 import 'package:finamp/components/MusicScreen/offline_mode_switch_list_tile.dart';
 import 'package:finamp/components/MusicScreen/view_list_tile.dart';
-import 'package:finamp/components/finamp_icon.dart';
-import 'package:finamp/components/themed_bottom_sheet.dart';
+import 'package:finamp/components/night_radio_brand.dart';
 import 'package:finamp/l10n/app_localizations.dart';
 import 'package:finamp/models/finamp_models.dart';
 import 'package:finamp/screens/downloads_screen.dart';
@@ -15,16 +13,13 @@ import 'package:finamp/screens/playback_history_screen.dart';
 import 'package:finamp/screens/queue_restore_screen.dart';
 import 'package:finamp/screens/settings_screen.dart';
 import 'package:finamp/services/downloads_service.dart';
-import 'package:finamp/services/feedback_helper.dart';
 import 'package:finamp/services/finamp_settings_helper.dart';
 import 'package:finamp/services/finamp_user_helper.dart';
 import 'package:finamp/services/server_info_provider.dart';
-import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tabler_icons/flutter_tabler_icons.dart';
 import 'package:get_it/get_it.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 import '../extensions/localizations.dart';
 
@@ -64,19 +59,12 @@ class MusicScreenDrawer extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            SizedBox(height: 12),
-                            FinampIcon(
-                              56,
-                              56,
-                              overrideColor: ref.watch(finampSettingsProvider.isOffline)
-                                  ? TextTheme.of(context).bodyMedium?.color?.withOpacity(0.6)
-                                  : null,
+                            const SizedBox(height: 8),
+                            NightRadioBrand(
+                              offline: ref.watch(finampSettingsProvider.isOffline),
+                              busy: ref.watch(isDownloadingOrSyncingProvider).value ?? downloadsService.isProcessing,
                             ),
-                            SizedBox(height: 8),
-                            Text(
-                              ref.watch(packageNameProvider).valueOrNull ?? AppLocalizations.of(context)!.finamp,
-                              style: const TextStyle(fontSize: 20),
-                            ),
+                            const SizedBox(height: 12),
                             if (settings?.isOffline ?? false)
                               Text.rich(
                                 TextSpan(
@@ -232,13 +220,5 @@ class MusicScreenDrawer extends ConsumerWidget {
     );
   }
 }
-
-final packageNameProvider = FutureProvider((Ref ref) async {
-  final info = await PackageInfo.fromPlatform();
-  if (Platform.isLinux) {
-    return info.appName.capitalize;
-  }
-  return info.appName;
-});
 
 enum ConnectionStateInfo { syncing, downloading, deleting, connectedLocal, syncingLocal, downloadingLocal, other }

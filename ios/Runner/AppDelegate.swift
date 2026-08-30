@@ -4,12 +4,15 @@ import Flutter
 import MediaPlayer
 import Intents
 import AVFoundation
+import CarPlay
 
 // Shared engine for CarPlay - the flutter_carplay plugin requires this
 let flutterEngine = FlutterEngine(name: "SharedEngine", project: nil, allowHeadlessExecution: true)
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, INPlayMediaIntentHandling {
+    private var finampCarPlayController: AnyObject?
+
     override func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -17,6 +20,12 @@ let flutterEngine = FlutterEngine(name: "SharedEngine", project: nil, allowHeadl
         // Start the shared engine and register plugins with it for CarPlay
         flutterEngine.run()
         GeneratedPluginRegistrant.register(with: flutterEngine)
+        NightAudioBridgeSetup(flutterEngine.binaryMessenger)
+        if #available(iOS 14.0, *) {
+            finampCarPlayController = FinampCarPlayNowPlayingController(
+                messenger: flutterEngine.binaryMessenger
+            )
+        }
 
         // Set up method channel for playback state sync to MPNowPlayingInfoCenter
         // TODO: This is a workaround because audio_service doesn't set playbackState on iOS.
@@ -103,7 +112,7 @@ extension AppDelegate {
             binaryMessenger: flutterEngine.binaryMessenger
         )
 
-        channel.setMethodCallHandler { [weak self] (call, result) in
+        channel.setMethodCallHandler { (call, result) in
             switch call.method {
             case "setPlaybackState":
                 guard let args = call.arguments as? [String: Any],
@@ -122,6 +131,66 @@ extension AppDelegate {
                 result(FlutterMethodNotImplemented)
             }
         }
+    }
+}
+
+// CarPlay controls live outside the scene delegate because flutter_carplay owns
+// the active CPTemplateApplicationSceneDelegate. Keeping this controller on the
+// shared engine makes the controls available to the real CarPlay scene.
+@available(iOS 14.0, *)
+private final class FinampCarPlayNowPlayingController: NSObject, CPNowPlayingTemplateObserver {
+    private let channel: FlutterMethodChannel
+    private var shuffleButton: CPNowPlayingShuffleButton?
+    private var repeatButton: CPNowPlayingRepeatButton?
+
+    init(messenger: FlutterBinaryMessenger) {
+        channel = FlutterMethodChannel(name: "finamp/carplay_ui", binaryMessenger: messenger)
+        super.init()
+
+        let nowPlaying = CPNowPlayingTemplate.shared
+        nowPlaying.add(self)
+        nowPlaying.isUpNextButtonEnabled = true
+
+        let shuffle = CPNowPlayingShuffleButton { [weak self] button in
+            self?.channel.invokeMethod("toggleShuffle", arguments: nil) { response in
+                button.isSelected = response as? Bool ?? button.isSelected
+            }
+        }
+        let repeatMode = CPNowPlayingRepeatButton { [weak self] button in
+            self?.channel.invokeMethod("toggleRepeat", arguments: nil) { response in
+                button.isSelected = response as? Bool ?? button.isSelected
+            }
+        }
+        shuffleButton = shuffle
+        repeatButton = repeatMode
+        nowPlaying.updateNowPlayingButtons([shuffle, repeatMode])
+
+        channel.setMethodCallHandler { [weak self] call, result in
+            guard call.method == "syncPlaybackModes" else {
+                result(FlutterMethodNotImplemented)
+                return
+            }
+            guard let arguments = call.arguments as? [String: Any] else {
+                result(FlutterError(
+                    code: "invalid_arguments",
+                    message: "Missing playback mode state",
+                    details: nil
+                ))
+                return
+            }
+            self?.shuffleButton?.isSelected = arguments["shuffle"] as? Bool ?? false
+            self?.repeatButton?.isSelected = arguments["repeat"] as? Bool ?? false
+            result(nil)
+        }
+    }
+
+    deinit {
+        channel.setMethodCallHandler(nil)
+        CPNowPlayingTemplate.shared.remove(self)
+    }
+
+    func nowPlayingTemplateUpNextButtonTapped(_ nowPlayingTemplate: CPNowPlayingTemplate) {
+        channel.invokeMethod("showUpNext", arguments: nil)
     }
 }
 

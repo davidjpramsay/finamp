@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:finamp/components/MusicScreen/item_wrapper.dart';
 import 'package:finamp/components/finamp_app_bar_back_button.dart';
-import 'package:finamp/components/finamp_icon.dart';
+import 'package:finamp/components/night_radio_brand.dart';
 import 'package:finamp/extensions/color_extensions.dart';
 import 'package:finamp/l10n/app_localizations.dart';
 import 'package:finamp/menus/components/icon_button_with_semantics.dart';
@@ -84,11 +84,6 @@ class FinampMusicScreenHeader extends ConsumerWidget implements PreferredSizeWid
     Color activeTabTextColor = AtContrast.getContrastiveTintedTextColor(onBackground: activeTabBackgroundColor);
     Color inactiveTabTextColor = AtContrast.getContrastiveTintedTextColor(onBackground: inactiveTabBackgroundColor);
 
-    final statusIcon = ref.watch(finampSettingsProvider.isOffline)
-        ? TablerIcons.cloud_off
-        : ref.watch(FinampUserHelper.finampCurrentUserProvider)?.isLocal ?? false
-        ? TablerIcons.wifi
-        : null; // hide icon by default (remote connection)
     final isProcessingDownloads =
         ref.watch(isDownloadingOrSyncingProvider).valueOrNull ?? downloadsService.isProcessing;
 
@@ -130,70 +125,18 @@ class FinampMusicScreenHeader extends ConsumerWidget implements PreferredSizeWid
                 if (backButtonInsteadOfTabs)
                   SizedBox(width: _upperToolbarHeight + 6, height: _upperToolbarHeight, child: FinampAppBarBackButton())
                 else
-                  Material(
-                    elevation: 3.0,
-                    surfaceTintColor: Colors.transparent,
-                    shadowColor: Theme.brightnessOf(context) == Brightness.dark
-                        ? Colors.transparent
-                        : Theme.of(context).colorScheme.shadow.withOpacity(0.4),
-                    color: Theme.brightnessOf(context) == Brightness.dark
-                        ? Color.alphaBlend(
-                            // only use primary accent if Finamp icon is guaranteed to look nice on it
-                            // otherwise use a static dark blue background
-                            ref.watch(finampSettingsProvider.useMonochromeIcon) ||
-                                    (!ref.watch(finampSettingsProvider.useSystemAccentColor) &&
-                                        ref.watch(finampSettingsProvider.accentColor) == null)
-                                ? ColorScheme.of(context).primary.withOpacity(0.1)
-                                : Color(0xff000e2e),
-                            ColorScheme.of(context).surface,
-                          )
-                        : Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadiusGeometry.circular(12.0),
-                      side: Theme.brightnessOf(context) == Brightness.dark
-                          ? BorderSide(color: ColorScheme.of(context).outline.withOpacity(0.3), width: 0.5)
-                          : BorderSide.none,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 5.0, right: 3.0, top: 5.0, bottom: 3.0),
-                      child: GestureDetector(
-                        onTap: openMenu,
-                        onSecondaryTap: isProcessingDownloads
-                            ? () {
-                                Navigator.of(context).pushNamed(DownloadsScreen.routeName);
-                              }
-                            : null,
-                        onLongPress: isProcessingDownloads
-                            ? () {
-                                Navigator.of(context).pushNamed(DownloadsScreen.routeName);
-                              }
-                            : null,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            FinampIcon(
-                              35,
-                              35,
-                              overrideColor: ref.watch(finampSettingsProvider.isOffline)
-                                  ? TextTheme.of(context).bodyMedium?.color?.withOpacity(0.6)
-                                  : null,
-                            ),
-                            Positioned(bottom: -4, right: -2, child: Icon(statusIcon, size: 16)),
-                            if (isProcessingDownloads)
-                              Positioned(
-                                bottom: statusIcon != null ? -6 : 1,
-                                right: statusIcon != null ? -4 : 3,
-                                child: SizedBox.square(
-                                  dimension: statusIcon != null ? 20.0 : 10.0,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 1,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.onSurface),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
+                  GestureDetector(
+                    onSecondaryTap: isProcessingDownloads
+                        ? () => Navigator.of(context).pushNamed(DownloadsScreen.routeName)
+                        : null,
+                    onLongPress: isProcessingDownloads
+                        ? () => Navigator.of(context).pushNamed(DownloadsScreen.routeName)
+                        : null,
+                    child: NightRadioBrand(
+                      compact: true,
+                      offline: ref.watch(finampSettingsProvider.isOffline),
+                      busy: isProcessingDownloads,
+                      onTap: openMenu,
                     ),
                   ),
                 const SizedBox(width: 9.0),
@@ -241,7 +184,12 @@ class FinampMusicScreenHeader extends ConsumerWidget implements PreferredSizeWid
                             singleTabConfig?.getTitle(context.l10n) ??
                                 finampUserHelper.currentUser?.currentView?.name ??
                                 appName,
-                            style: TextStyle(fontSize: 20),
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           );
@@ -357,14 +305,18 @@ class FinampMusicScreenHeader extends ConsumerWidget implements PreferredSizeWid
         if (!backButtonInsteadOfTabs)
           TabBar(
             controller: tabController,
-            indicator: BoxDecoration(borderRadius: BorderRadius.circular(8.0), color: activeTabBackgroundColor),
-            indicatorPadding: EdgeInsets.zero,
-            splashBorderRadius: BorderRadius.circular(8.0),
+            indicator: BoxDecoration(
+              borderRadius: BorderRadius.circular(3),
+              color: activeTabBackgroundColor,
+              border: Border.all(color: ColorScheme.of(context).primary.withValues(alpha: 0.55)),
+            ),
+            indicatorPadding: const EdgeInsets.symmetric(vertical: 2),
+            splashBorderRadius: BorderRadius.circular(3),
             labelColor: activeTabTextColor,
             // unselectedLabelColor: Colors.red, //!!! the label color is specified below, along with the font
             labelPadding: EdgeInsets.symmetric(horizontal: 4.0),
-            dividerHeight: 0.0,
-            dividerColor: Colors.transparent,
+            dividerHeight: 1.0,
+            dividerColor: ColorScheme.of(context).outline,
             padding: EdgeInsets.only(top: 4.0, bottom: 0.0, left: 10.0, right: 6.0),
             tabs: sortedTabs.map((tabType) {
               final textStyle = tabController?.index == sortedTabs.indexOf(tabType)

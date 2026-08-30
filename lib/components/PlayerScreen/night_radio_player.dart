@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:finamp/components/AddToPlaylistScreen/add_to_playlist_button.dart';
@@ -9,6 +10,8 @@ import 'package:finamp/models/finamp_models.dart';
 import 'package:finamp/models/jellyfin_models.dart';
 import 'package:finamp/services/process_artist.dart';
 import 'package:finamp/services/queue_service.dart';
+import 'package:finamp/services/night_audio_service.dart';
+import 'package:finamp/theme/night_radio_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get_it/get_it.dart';
@@ -19,7 +22,7 @@ class NightRadioPanel extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(12),
-    this.borderRadius = const BorderRadius.all(Radius.circular(10)),
+    this.borderRadius = const BorderRadius.all(Radius.circular(6)),
     this.clipBehavior = Clip.antiAlias,
   });
 
@@ -30,23 +33,24 @@ class NightRadioPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
     return Container(
       clipBehavior: clipBehavior,
       padding: padding,
       decoration: BoxDecoration(
         borderRadius: borderRadius,
-        border: Border.all(color: colors.outline.withValues(alpha: 0.38)),
+        border: Border.all(color: NightRadioColors.violet.withValues(alpha: 0.34), width: 0.8),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color.alphaBlend(colors.primary.withValues(alpha: 0.075), const Color(0xF20D1014)),
-            const Color(0xF2090B0E),
+            Color.alphaBlend(NightRadioColors.violet.withValues(alpha: 0.08), const Color(0xFA101219)),
+            const Color(0xFA080A0E),
           ],
         ),
-        boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 18, offset: Offset(0, 8))],
+        boxShadow: const [
+          BoxShadow(color: Color(0x77000000), blurRadius: 18, offset: Offset(0, 8)),
+          BoxShadow(color: Color(0x1FA970FF), blurRadius: 14),
+        ],
       ),
       child: child,
     );
@@ -227,10 +231,10 @@ class _TechnicalBadge extends StatelessWidget {
   }
 }
 
-/// A deliberately light-weight, decorative playback visualizer.
+/// An audio-driven FFT display supplied by the native playback pipeline.
 ///
-/// It paints directly from a single ticker and is isolated behind a repaint
-/// boundary, so the surrounding player does not rebuild for every frame.
+/// There is deliberately no animation ticker or synthetic fallback here: when
+/// the audio is silent, paused, or unsupported, the display shows no signal.
 class NightRadioVisualizer extends StatefulWidget {
   const NightRadioVisualizer({super.key, required this.active, this.height = 44});
 
@@ -241,41 +245,63 @@ class NightRadioVisualizer extends StatefulWidget {
   State<NightRadioVisualizer> createState() => _NightRadioVisualizerState();
 }
 
-class _NightRadioVisualizerState extends State<NightRadioVisualizer> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
+class _NightRadioVisualizerState extends State<NightRadioVisualizer> {
+  static const _emptyLevels = <double>[
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ];
+
+  StreamSubscription<List<double>>? _subscription;
+  List<double> _levels = _emptyLevels;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1700), value: 0.18);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _syncAnimation();
+    _subscription = NightAudioService.instance.spectrum.listen((levels) {
+      if (!mounted || levels.isEmpty) return;
+      setState(() => _levels = levels);
+    });
   }
 
   @override
   void didUpdateWidget(covariant NightRadioVisualizer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _syncAnimation();
-  }
-
-  void _syncAnimation() {
-    final shouldAnimate =
-        widget.active && !MediaQuery.disableAnimationsOf(context) && TickerMode.valuesOf(context).enabled;
-    if (shouldAnimate && !_controller.isAnimating) {
-      _controller.repeat();
-    } else if (!shouldAnimate && _controller.isAnimating) {
-      _controller.stop();
-      _controller.value = 0.18;
-    }
+    if (!widget.active && oldWidget.active) setState(() => _levels = _emptyLevels);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _subscription?.cancel();
     super.dispose();
   }
 
@@ -286,7 +312,11 @@ class _NightRadioVisualizerState extends State<NightRadioVisualizer> with Single
       width: double.infinity,
       child: RepaintBoundary(
         child: CustomPaint(
-          painter: _NightRadioVisualizerPainter(animation: _controller, color: Theme.of(context).colorScheme.primary),
+          painter: _NightRadioVisualizerPainter(
+            levels: widget.active ? _levels : _emptyLevels,
+            primary: NightRadioColors.violet,
+            secondary: NightRadioColors.cyan,
+          ),
         ),
       ),
     );
@@ -294,41 +324,231 @@ class _NightRadioVisualizerState extends State<NightRadioVisualizer> with Single
 }
 
 class _NightRadioVisualizerPainter extends CustomPainter {
-  _NightRadioVisualizerPainter({required Animation<double> animation, required this.color})
-    : _animation = animation,
-      super(repaint: animation);
+  const _NightRadioVisualizerPainter({required this.levels, required this.primary, required this.secondary});
 
-  final Animation<double> _animation;
-  final Color color;
+  final List<double> levels;
+  final Color primary;
+  final Color secondary;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
 
-    const barCount = 34;
-    const gap = 2.4;
+    final barCount = levels.length;
+    if (barCount == 0) return;
+    const gap = 2.0;
     final barWidth = max(1.2, (size.width - gap * (barCount - 1)) / barCount);
-    final baselinePaint = Paint()..color = color.withValues(alpha: 0.1);
-    final barPaint = Paint()..color = color.withValues(alpha: 0.82);
-    final phase = _animation.value * pi * 2;
+    final baselinePaint = Paint()..color = primary.withValues(alpha: 0.16);
+    final gridPaint = Paint()
+      ..color = NightRadioColors.outline.withValues(alpha: 0.38)
+      ..strokeWidth = 0.5;
+    final barPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [primary.withValues(alpha: 0.82), secondary, NightRadioColors.amber],
+        stops: const [0, 0.76, 1],
+      ).createShader(Offset.zero & size);
 
     canvas.drawRect(Rect.fromLTWH(0, size.height - 1, size.width, 1), baselinePaint);
+    for (var division = 1; division < 4; division++) {
+      final y = size.height * division / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
     for (var index = 0; index < barCount; index++) {
-      final position = index / max(1, barCount - 1);
-      final envelope = sin(position * pi).clamp(0.22, 1.0);
-      final wave = (sin(phase * 1.3 + index * 0.72) + sin(phase * 0.73 - index * 0.31)) / 4 + 0.5;
-      final barHeight = max(2.0, size.height * (0.13 + wave * 0.78 * envelope));
+      final level = levels[index].clamp(0.0, 1.0);
+      final barHeight = max(1.0, size.height * level);
       final x = index * (barWidth + gap);
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, size.height - barHeight, barWidth, barHeight),
-        Radius.circular(barWidth / 2),
-      );
-      canvas.drawRRect(rect, barPaint);
+      canvas.drawRect(Rect.fromLTWH(x, size.height - barHeight, barWidth, barHeight), barPaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _NightRadioVisualizerPainter oldDelegate) => oldDelegate.color != color;
+  bool shouldRepaint(covariant _NightRadioVisualizerPainter oldDelegate) =>
+      oldDelegate.levels != levels || oldDelegate.primary != primary || oldDelegate.secondary != secondary;
+}
+
+class NightRadioSpectrumPanel extends StatelessWidget {
+  const NightRadioSpectrumPanel({super.key, required this.active, this.height = 44});
+
+  final bool active;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            NightRadioSectionLabel(active ? 'Live FFT // 38 Hz–18 kHz' : 'Signal Paused', color: NightRadioColors.cyan),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () => showNightRadioEqualizer(context),
+              icon: const Icon(Icons.tune_rounded, size: 15),
+              label: const Text('EQ'),
+              style: TextButton.styleFrom(
+                foregroundColor: NightRadioColors.amber,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                minimumSize: const Size(48, 30),
+                textStyle: const TextStyle(fontFamily: 'monospace', fontSize: 10, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        NightRadioVisualizer(active: active, height: height),
+      ],
+    );
+  }
+}
+
+Future<void> showNightRadioEqualizer(BuildContext context) async {
+  await NightAudioService.instance.ensureInitialized();
+  if (!context.mounted) return;
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => const _NightRadioEqualizerSheet(),
+  );
+}
+
+class _NightRadioEqualizerSheet extends StatefulWidget {
+  const _NightRadioEqualizerSheet();
+
+  @override
+  State<_NightRadioEqualizerSheet> createState() => _NightRadioEqualizerSheetState();
+}
+
+class _NightRadioEqualizerSheetState extends State<_NightRadioEqualizerSheet> {
+  List<double>? _draftGains;
+
+  String _frequency(double frequency) => frequency >= 1000
+      ? '${(frequency / 1000).toStringAsFixed(frequency % 1000 == 0 ? 0 : 1)}K'
+      : frequency.toStringAsFixed(0);
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: ValueListenableBuilder<NightEqualizerState>(
+        valueListenable: NightAudioService.instance.equalizer,
+        builder: (context, state, _) {
+          if (!state.supported) {
+            return const Padding(
+              padding: EdgeInsets.fromLTRB(24, 6, 24, 30),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  NightRadioSectionLabel('Equalizer // unavailable'),
+                  SizedBox(height: 12),
+                  Text('The live equalizer is currently available in the Finamp Night iPhone audio engine.'),
+                ],
+              ),
+            );
+          }
+
+          final gains = _draftGains ?? state.gains;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const NightRadioSectionLabel('Five-band parametric EQ', color: NightRadioColors.amber),
+                    const Spacer(),
+                    Switch.adaptive(value: state.enabled, onChanged: NightAudioService.instance.setEnabled),
+                  ],
+                ),
+                Text(
+                  state.enabled ? 'DSP ONLINE // ±12 dB' : 'DSP BYPASSED // zero processing',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: state.enabled ? NightRadioColors.signal : NightRadioColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 224,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var index = 0; index < gains.length; index++)
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Text(
+                                '${gains[index] >= 0 ? '+' : ''}${gains[index].toStringAsFixed(1)}',
+                                style: const TextStyle(
+                                  color: NightRadioColors.cyan,
+                                  fontFamily: 'monospace',
+                                  fontSize: 10,
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
+                              ),
+                              Expanded(
+                                child: RotatedBox(
+                                  quarterTurns: 3,
+                                  child: Slider(
+                                    value: gains[index],
+                                    min: state.minimumGain,
+                                    max: state.maximumGain,
+                                    divisions: 48,
+                                    onChanged: state.enabled
+                                        ? (value) => setState(() {
+                                            _draftGains = [...gains]..[index] = value;
+                                          })
+                                        : null,
+                                    onChangeEnd: (value) async {
+                                      await NightAudioService.instance.setBandGain(index, value);
+                                      if (mounted) setState(() => _draftGains = null);
+                                    },
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                _frequency(state.frequencies[index]),
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: NightRadioColors.text),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: [
+                    _PresetButton(label: 'FLAT', gains: const [0, 0, 0, 0, 0]),
+                    _PresetButton(label: 'WARM', gains: const [3, 2, 0, -1, -2]),
+                    _PresetButton(label: 'PUNCH', gains: const [3, 1, -1, 2, 3]),
+                    _PresetButton(label: 'AIR', gains: const [-1, 0, 1, 2, 3]),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PresetButton extends StatelessWidget {
+  const _PresetButton({required this.label, required this.gains});
+
+  final String label;
+  final List<double> gains;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(onPressed: () => NightAudioService.instance.applyPreset(gains), child: Text(label));
+  }
 }
 
 /// Always-visible queue context for wide player layouts.

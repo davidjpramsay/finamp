@@ -26,6 +26,7 @@ import 'package:finamp/services/media_state_stream.dart';
 import 'package:finamp/services/music_player_background_task.dart';
 import 'package:finamp/services/queue_service.dart';
 import 'package:finamp/services/theme_provider.dart';
+import 'package:finamp/theme/night_radio_theme.dart';
 import 'package:finamp/utils/platform_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,33 +42,7 @@ const double _defaultToolbarHeight = 53.0;
 const int _defaultMaxToolbarLines = 2;
 
 ThemeData _nightRadioTheme(ThemeData theme) {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: theme.colorScheme.primary,
-    brightness: Brightness.dark,
-    surface: const Color(0xFF0B0E12),
-  );
-  final textTheme = theme.textTheme.apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface);
-
-  return theme.copyWith(
-    brightness: Brightness.dark,
-    colorScheme: scheme,
-    scaffoldBackgroundColor: const Color(0xFF07090C),
-    cardColor: const Color(0xFF11151A),
-    canvasColor: const Color(0xFF090C10),
-    dividerColor: scheme.outline.withValues(alpha: 0.28),
-    iconTheme: IconThemeData(color: scheme.onSurface.withValues(alpha: 0.88)),
-    textTheme: textTheme,
-    appBarTheme: theme.appBarTheme.copyWith(
-      backgroundColor: Colors.transparent,
-      foregroundColor: scheme.onSurface,
-      surfaceTintColor: Colors.transparent,
-    ),
-    sliderTheme: theme.sliderTheme.copyWith(
-      activeTrackColor: scheme.primary,
-      thumbColor: scheme.primary,
-      overlayColor: scheme.primary.withValues(alpha: 0.12),
-    ),
-  );
+  return buildNightRadioTheme(pageTransitionsTheme: theme.pageTransitionsTheme);
 }
 
 class PlayerScreen extends StatelessWidget {
@@ -293,7 +268,7 @@ class _PlayerScreenContent extends ConsumerWidget {
                 toolbarHeight: toolbarHeight,
                 title: Row(
                   children: [
-                    const NightRadioSectionLabel('Finamp'),
+                    const NightRadioSectionLabel('Finamp Night // Player'),
                     Container(
                       width: 1,
                       height: 18,
@@ -394,7 +369,7 @@ class _PlayerScreenContent extends ConsumerWidget {
                   children: [
                     NightRadioTrackDetails(compact: compact),
                     SizedBox(height: compact ? 5 : 9),
-                    NightRadioVisualizer(active: playbackActive, height: visualizerHeight),
+                    NightRadioSpectrumPanel(active: playbackActive, height: visualizerHeight),
                     SizedBox(height: compact ? 3 : 7),
                     ControlArea(controller),
                     if (controller.shouldShow(PlayerHideable.bottomActions)) ...[
@@ -425,14 +400,29 @@ class _PlayerScreenContent extends ConsumerWidget {
     required bool isLyricsLoading,
     required bool isLyricsAvailable,
   }) {
-    final artworkHeight = min(controller.albumSize.height, constraints.maxHeight * 0.52);
     final compact = constraints.maxHeight < 630;
+    final artworkSize = min(constraints.maxWidth * (compact ? 0.36 : 0.42), constraints.maxHeight * 0.31);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
       child: Column(
         children: [
-          SizedBox(height: artworkHeight, width: double.infinity, child: _buildArtworkDeck()),
+          SizedBox(
+            height: artworkSize,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(width: artworkSize, child: _buildArtworkDeck(compact: true)),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: NightRadioPanel(
+                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+                    child: const Align(alignment: Alignment.centerLeft, child: NightRadioTrackDetails(compact: true)),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 10),
           Expanded(
             child: NightRadioPanel(
@@ -442,9 +432,7 @@ class _PlayerScreenContent extends ConsumerWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    NightRadioTrackDetails(compact: compact),
-                    SizedBox(height: compact ? 5 : 9),
-                    NightRadioVisualizer(active: playbackActive, height: compact ? 28 : 42),
+                    NightRadioSpectrumPanel(active: playbackActive, height: compact ? 28 : 42),
                     SizedBox(height: compact ? 2 : 7),
                     ControlArea(controller),
                     if (controller.shouldShow(PlayerHideable.bottomActions)) ...[

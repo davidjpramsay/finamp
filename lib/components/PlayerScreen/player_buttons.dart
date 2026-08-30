@@ -8,6 +8,7 @@ import 'package:finamp/components/audio_fade_progress_visualizer_container.dart'
 import 'package:finamp/l10n/app_localizations.dart';
 import 'package:finamp/screens/player_screen.dart';
 import 'package:finamp/services/feedback_helper.dart';
+import 'package:finamp/theme/night_radio_theme.dart';
 import 'package:finamp/utils/locale_helper.dart';
 import 'package:finamp/utils/platform_helper.dart';
 import 'package:flutter/material.dart';
@@ -67,7 +68,7 @@ class PlayerButtons extends ConsumerWidget {
           child: _RoundedIconButton(
             width: controller.shouldShow(PlayerHideable.bigPlayButton) ? 62 : 48,
             height: controller.shouldShow(PlayerHideable.bigPlayButton) ? 62 : 48,
-            borderRadius: BorderRadius.circular(controller.shouldShow(PlayerHideable.bigPlayButton) ? 16 : 12),
+            borderRadius: BorderRadius.circular(4),
             onTap: () {
               FeedbackHelper.feedback(FeedbackType.light);
               unawaited(audioHandler.togglePlayback());
@@ -146,7 +147,7 @@ class _RoundedIconButton extends StatelessWidget {
             BoxShadow(
               blurRadius: 2,
               offset: const Offset(0, 2),
-              color: (icon.color ?? IconTheme.of(context).color)!.withOpacity(0.25),
+              color: (icon.color ?? IconTheme.of(context).color)!.withValues(alpha: 0.25),
             ),
           ],
     );
@@ -161,8 +162,20 @@ class _RoundedIconButton extends StatelessWidget {
       height: height,
       child: Material(
         borderRadius: actualBorderRadius,
-        color: IconTheme.of(context).color!.withOpacity(0.15),
-        child: InkWell(borderRadius: actualBorderRadius, onTap: onTap, child: actualIcon),
+        color: NightRadioColors.violetDim,
+        shape: RoundedRectangleBorder(
+          borderRadius: actualBorderRadius,
+          side: const BorderSide(color: NightRadioColors.violet, width: 0.8),
+        ),
+        child: InkWell(
+          borderRadius: actualBorderRadius,
+          onTap: onTap,
+          splashColor: NightRadioColors.cyan.withValues(alpha: 0.18),
+          child: IconTheme(
+            data: const IconThemeData(color: NightRadioColors.amber),
+            child: Center(child: actualIcon),
+          ),
+        ),
       ),
     );
 

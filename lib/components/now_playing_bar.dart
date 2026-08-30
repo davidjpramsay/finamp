@@ -3,19 +3,19 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:audio_service/audio_service.dart';
-import 'package:finamp/color_schemes.g.dart';
 import 'package:finamp/components/AddToPlaylistScreen/add_to_playlist_button.dart';
+import 'package:finamp/components/PlayerScreen/night_radio_player.dart';
 import 'package:finamp/components/audio_fade_progress_visualizer_container.dart';
 import 'package:finamp/components/global_snackbar.dart';
 import 'package:finamp/components/one_line_marquee_helper.dart';
 import 'package:finamp/components/print_duration.dart';
-import 'package:finamp/extensions/color_extensions.dart';
 import 'package:finamp/l10n/app_localizations.dart';
 import 'package:finamp/models/finamp_models.dart';
 import 'package:finamp/services/current_track_metadata_provider.dart';
 import 'package:finamp/services/feedback_helper.dart';
 import 'package:finamp/services/queue_service.dart';
 import 'package:finamp/services/theme_provider.dart';
+import 'package:finamp/theme/night_radio_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,28 +37,23 @@ class NowPlayingBar extends ConsumerWidget {
   const NowPlayingBar({super.key});
 
   static const horizontalPadding = 8.0;
-  static const albumImageSize = 64.0;
+  static const albumImageSize = 74.0;
   static const showPlayButtonAtEnd = false;
 
   BoxDecoration? getShadow(BuildContext context) => BoxDecoration(
-    borderRadius: const BorderRadius.all(Radius.circular(12.0)),
-    border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.28)),
+    borderRadius: const BorderRadius.all(Radius.circular(6)),
+    border: Border.all(color: NightRadioColors.violet.withValues(alpha: 0.46), width: 0.8),
     boxShadow: [
-      BoxShadow(
-        blurRadius: 16.0,
-        spreadRadius: 2.0,
-        offset: const Offset(0, 7),
-        color: darkColorScheme.surface.withValues(alpha: 0.64),
-      ),
+      BoxShadow(blurRadius: 16.0, spreadRadius: 2.0, offset: const Offset(0, 7), color: const Color(0xB0000000)),
     ],
   );
 
   Color getProgressForegroundColor(WidgetRef ref) {
-    return Color.alphaBlend(ColorScheme.of(ref.context).primary.withValues(alpha: 0.3), const Color(0xFF10151A));
+    return const Color(0xFF241538);
   }
 
   Color getProgressBackgroundColor(WidgetRef ref) {
-    return Color.alphaBlend(ColorScheme.of(ref.context).primary.withValues(alpha: 0.08), const Color(0xFF090C10));
+    return const Color(0xFF090A0F);
   }
 
   Widget buildLoadingQueueBar(WidgetRef ref, void Function()? retryCallback) {
@@ -80,9 +75,9 @@ class NowPlayingBar extends ConsumerWidget {
             shadowColor: ColorScheme.of(
               context,
             ).primary.withValues(alpha: Theme.brightnessOf(context) == Brightness.light ? 0.75 : 0.3),
-            borderRadius: BorderRadius.circular(12.0),
+            borderRadius: BorderRadius.circular(6),
             clipBehavior: Clip.antiAlias,
-            color: const Color(0xFF0B0E12),
+            color: NightRadioColors.surface,
             elevation: 8.0,
             child: Container(
               width: MediaQuery.widthOf(context),
@@ -92,7 +87,7 @@ class NowPlayingBar extends ConsumerWidget {
                 clipBehavior: Clip.antiAlias,
                 decoration: ShapeDecoration(
                   color: progressBackgroundColor,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -169,11 +164,7 @@ class NowPlayingBar extends ConsumerWidget {
 
     final elapsedPartBackgroundColor = getProgressForegroundColor(ref);
     final remainingPartBackgroundColor = getProgressBackgroundColor(ref);
-    final averageBackgroundColor = Color.alphaBlend(
-      elapsedPartBackgroundColor.withValues(alpha: 0.5),
-      remainingPartBackgroundColor,
-    );
-    Color primaryTextColor = AtContrast.getContrastiveTintedTextColor(onBackground: averageBackgroundColor);
+    const primaryTextColor = NightRadioColors.text;
 
     final showPauseButton = ref.watch(
       mediaStateProvider.select((x) => x.playbackState.playing && x.fadeDirection != FadeDirection.fadeOut),
@@ -223,9 +214,9 @@ class NowPlayingBar extends ConsumerWidget {
                   shadowColor: ColorScheme.of(
                     context,
                   ).primary.withValues(alpha: Theme.brightnessOf(context) == Brightness.light ? 0.75 : 0.3),
-                  borderRadius: BorderRadius.circular(12.0),
+                  borderRadius: BorderRadius.circular(6),
                   clipBehavior: Clip.antiAlias,
-                  color: const Color(0xFF0B0E12),
+                  color: NightRadioColors.surface,
                   elevation: 8.0,
                   // If we have a media item and the player hasn't finished, show
                   // the now playing bar.
@@ -237,7 +228,7 @@ class NowPlayingBar extends ConsumerWidget {
                     clipBehavior: Clip.antiAlias,
                     decoration: ShapeDecoration(
                       color: remainingPartBackgroundColor,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -260,8 +251,8 @@ class NowPlayingBar extends ConsumerWidget {
                                 width: albumImageSize,
                                 height: albumImageSize,
                                 borderRadius: BorderRadius.only(
-                                  topLeft: Radius.circular(12.0),
-                                  bottomLeft: Radius.circular(12.0),
+                                  topLeft: Radius.circular(5),
+                                  bottomLeft: Radius.circular(5),
                                 ),
                                 child: IconButton(
                                   tooltip: AppLocalizations.of(context)!.togglePlaybackButtonTooltip,
@@ -301,8 +292,8 @@ class NowPlayingBar extends ConsumerWidget {
                                               color: elapsedPartBackgroundColor,
                                               shape: const RoundedRectangleBorder(
                                                 borderRadius: BorderRadius.only(
-                                                  topRight: Radius.circular(12),
-                                                  bottomRight: Radius.circular(12),
+                                                  topRight: Radius.circular(5),
+                                                  bottomRight: Radius.circular(5),
                                                 ),
                                               ),
                                             ),
@@ -327,19 +318,36 @@ class NowPlayingBar extends ConsumerWidget {
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
+                                          Row(
+                                            children: [
+                                              const Text(
+                                                'ON AIR // LIVE',
+                                                style: TextStyle(
+                                                  color: NightRadioColors.cyan,
+                                                  fontFamily: 'monospace',
+                                                  fontSize: 8,
+                                                  fontWeight: FontWeight.w800,
+                                                  letterSpacing: 0.8,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 7),
+                                              Expanded(child: NightRadioVisualizer(active: showPauseButton, height: 9)),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 2),
                                           OneLineMarqueeHelper(
                                             key: ValueKey(currentTrack.item.id),
                                             text: currentTrack.item.title,
                                             style: TextStyle(
-                                              fontSize: 14.5,
-                                              height: 26 / 20,
+                                              fontSize: 13.5,
+                                              height: 1.15,
                                               color: primaryTextColor,
                                               fontWeight: Theme.brightnessOf(context) == Brightness.light
                                                   ? FontWeight.w500
                                                   : FontWeight.w600,
                                             ),
                                           ),
-                                          const SizedBox(height: 4),
+                                          const SizedBox(height: 3),
                                           Row(
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
@@ -348,7 +356,7 @@ class NowPlayingBar extends ConsumerWidget {
                                                   processArtist(currentTrack.item.artist, context),
                                                   style: TextStyle(
                                                     color: primaryTextColor,
-                                                    fontSize: 13,
+                                                    fontSize: 11.5,
                                                     fontWeight: FontWeight.w400,
                                                     overflow: TextOverflow.ellipsis,
                                                   ),
@@ -389,7 +397,8 @@ class NowPlayingBar extends ConsumerWidget {
                                                               isRemaining: showRemaining,
                                                             ),
                                                             style: TextStyle(
-                                                              fontSize: 14,
+                                                              fontSize: 11,
+                                                              fontFamily: 'monospace',
                                                               fontWeight: FontWeight.w400,
                                                               color: primaryTextColor.withValues(alpha: 0.8),
                                                               fontFeatures: const [
@@ -404,7 +413,8 @@ class NowPlayingBar extends ConsumerWidget {
                                                               '/',
                                                               style: TextStyle(
                                                                 color: primaryTextColor.withValues(alpha: 0.8),
-                                                                fontSize: 14,
+                                                                fontSize: 11,
+                                                                fontFamily: 'monospace',
                                                                 fontWeight: FontWeight.w400,
                                                                 fontFeatures: const [
                                                                   // fixed-width digits
@@ -420,7 +430,8 @@ class NowPlayingBar extends ConsumerWidget {
                                                                   : "${currentTrack.item.duration?.inMinutes.toString()}:${((currentTrack.item.duration?.inSeconds ?? 0) % 60).toString().padLeft(2, '0')}",
                                                               style: TextStyle(
                                                                 color: primaryTextColor.withValues(alpha: 0.8),
-                                                                fontSize: 14,
+                                                                fontSize: 11,
+                                                                fontFamily: 'monospace',
                                                                 fontWeight: FontWeight.w400,
                                                                 fontFeatures: const [
                                                                   // fixed-width digits
@@ -465,7 +476,7 @@ class NowPlayingBar extends ConsumerWidget {
                                                 color: primaryTextColor.withValues(alpha: 0.5),
                                                 width: albumImageSize,
                                                 height: albumImageSize,
-                                                borderRadius: BorderRadius.circular(12.0),
+                                                borderRadius: BorderRadius.circular(5),
                                                 child: SizedBox.shrink(),
                                               ),
                                               IconButton(

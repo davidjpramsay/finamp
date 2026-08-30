@@ -52,11 +52,13 @@ import 'package:finamp/services/item_helper.dart';
 import 'package:finamp/services/keep_screen_on_helper.dart';
 import 'package:finamp/services/music_providers.dart';
 import 'package:finamp/services/network_manager.dart';
+import 'package:finamp/services/night_audio_service.dart';
 import 'package:finamp/services/offline_listen_helper.dart';
 import 'package:finamp/services/playback_history_service.dart';
 import 'package:finamp/services/playon_service.dart';
 import 'package:finamp/services/queue_service.dart';
 import 'package:finamp/services/theme_provider.dart';
+import 'package:finamp/theme/night_radio_theme.dart';
 import 'package:finamp/services/ui_overlay_setter_observer.dart';
 import 'package:finamp/services/widget_bindings_observer_provider.dart';
 import 'package:flutter/foundation.dart';
@@ -168,6 +170,8 @@ Future<void> main(List<String> args, {bool integrationTesting = false, bool logi
     _mainLog.info("Setup PlayOnService");
     await _setupPlaybackServices();
     _mainLog.info("Setup audio player");
+    await NightAudioService.instance.ensureInitialized();
+    _mainLog.info("Setup Finamp Night audio DSP");
     await _setupKeepScreenOnHelper();
     _mainLog.info("Setup KeepScreenOnHelper");
     await _setupDiscordRpc();
@@ -936,13 +940,6 @@ class FinampApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final useSystemTheme = ref.watch(finampSettingsProvider.useSystemAccentColor);
-    // System Accent has priority over custom Accent
-    Color? accentColor = ref.watch(
-      useSystemTheme ? finampSettingsProvider.systemAccentColor : finampSettingsProvider.accentColor,
-    );
-    final themeMode = ref.watch(finampSettingsProvider.themeMode);
-    final amoledTheme = ref.watch(finampSettingsProvider.amoledTheme);
     final locale = ref.watch(finampSettingsProvider.locale);
     final transitionBuilder = MediaQuery.disableAnimationsOf(context)
         ? PageTransitionsTheme(
@@ -954,7 +951,7 @@ class FinampApp extends ConsumerWidget {
           )
         : null;
     return MaterialApp(
-      title: "Finamp",
+      title: "Finamp Night",
       routes: {
         SplashScreen.routeName: (context) => const SplashScreen(),
         LoginScreen.routeName: (context) => const LoginScreen(),
@@ -999,49 +996,11 @@ class FinampApp extends ConsumerWidget {
       },
       initialRoute: SplashScreen.routeName,
       navigatorObservers: [SplitScreenNavigatorObserver(), KeepScreenOnObserver()],
-      builder: buildPlayerSplitScreenScaffold,
-      theme: ThemeData(
-        brightness: Brightness.light,
-        colorScheme: getColorScheme(accentColor, Brightness.light, amoledTheme),
-        appBarTheme: const AppBarThemeData(
-          systemOverlayStyle: SystemUiOverlayStyle(
-            statusBarBrightness: Brightness.light,
-            statusBarIconBrightness: Brightness.dark,
-            systemNavigationBarIconBrightness: Brightness.dark,
-          ),
-        ),
-        snackBarTheme: const SnackBarThemeData(
-          //TODO get rid of floating action buttons and re-enable the floating behavior and insetPadding
-          // behavior: SnackBarBehavior.floating,
-          elevation: 10.0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12.0))),
-          // insetPadding: EdgeInsets.symmetric(
-          //   horizontal: 12.0,
-          //   vertical: 0.0,
-          // ),
-          dismissDirection: DismissDirection.horizontal,
-        ),
-        tooltipTheme: const TooltipThemeData(waitDuration: Duration(milliseconds: 800), preferBelow: false),
-        pageTransitionsTheme: transitionBuilder,
-      ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        colorScheme: getColorScheme(accentColor, Brightness.dark, amoledTheme),
-        snackBarTheme: const SnackBarThemeData(
-          //TODO get rid of floating action buttons and re-enable the floating behavior and insetPadding
-          // behavior: SnackBarBehavior.floating,
-          elevation: 10.0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12.0))),
-          // insetPadding: EdgeInsets.symmetric(
-          //   horizontal: 12.0,
-          //   vertical: 0.0,
-          // ),
-          dismissDirection: DismissDirection.horizontal,
-        ),
-        pageTransitionsTheme: transitionBuilder,
-      ),
+      builder: (context, child) => NightRadioAppShell(child: buildPlayerSplitScreenScaffold(context, child)),
+      theme: buildNightRadioTheme(pageTransitionsTheme: transitionBuilder),
+      darkTheme: buildNightRadioTheme(pageTransitionsTheme: transitionBuilder),
       scrollBehavior: FinampScrollBehavior(),
-      themeMode: themeMode,
+      themeMode: ThemeMode.dark,
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
