@@ -17,9 +17,12 @@ private func makeFCPChannelId(event: String) -> String {
 
 @available(iOS 14.0, *)
 @objc(CarPlaySceneDelegate)
-class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPInterfaceControllerDelegate {
+class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPInterfaceControllerDelegate, CPNowPlayingTemplateObserver {
 
     private static var interfaceController: CPInterfaceController?
+    private var finampUIChannel: FlutterMethodChannel?
+    private var shuffleButton: CPNowPlayingShuffleButton?
+    private var repeatButton: CPNowPlayingRepeatButton?
 
     override init() {
         super.init()
@@ -35,7 +38,7 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPI
         interfaceController.delegate = self
 
         // Send connection event to Flutter using the plugin's event channel
-        let eventChannel = FlutterEventChannel(
+        _ = FlutterEventChannel(
             name: makeFCPChannelId(event: "onCarplayConnectionChange"),
             binaryMessenger: flutterEngine.binaryMessenger
         )
@@ -45,6 +48,8 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPI
             name: makeFCPChannelId(event: ""),
             binaryMessenger: flutterEngine.binaryMessenger
         )
+
+        configureFinampNowPlaying()
 
         // Notify Flutter that CarPlay connected
         methodChannel.invokeMethod("onCarplayConnectionChange", arguments: ["status": "connected"])
@@ -66,6 +71,9 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPI
 
         interfaceController.delegate = nil
         CarPlaySceneDelegate.interfaceController = nil
+        CPNowPlayingTemplate.shared.remove(self)
+        finampUIChannel?.setMethodCallHandler(nil)
+        finampUIChannel = nil
 
         NSLog("[FINAMP-CarPlay] CarPlay disconnected")
     }
@@ -92,5 +100,57 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPI
     // CPInterfaceControllerDelegate method
     func templateDidDisappear(_ template: CPTemplate, animated: Bool) {
         NSLog("[FINAMP-CarPlay] templateDidDisappear")
+    }
+
+    // MARK: - Finamp Now Playing
+
+    private func configureFinampNowPlaying() {
+        let channel = FlutterMethodChannel(
+            name: "finamp/carplay_ui",
+            binaryMessenger: flutterEngine.binaryMessenger
+        )
+        finampUIChannel = channel
+
+        let nowPlayingTemplate = CPNowPlayingTemplate.shared
+        nowPlayingTemplate.remove(self)
+        nowPlayingTemplate.add(self)
+        nowPlayingTemplate.isUpNextButtonEnabled = true
+
+        let shuffle = CPNowPlayingShuffleButton { [weak self] button in
+            self?.finampUIChannel?.invokeMethod("toggleShuffle", arguments: nil) { response in
+                if let selected = response as? Bool {
+                    button.isSelected = selected
+                }
+            }
+        }
+        let repeatMode = CPNowPlayingRepeatButton { [weak self] button in
+            self?.finampUIChannel?.invokeMethod("toggleRepeat", arguments: nil) { response in
+                if let selected = response as? Bool {
+                    button.isSelected = selected
+                }
+            }
+        }
+        shuffleButton = shuffle
+        repeatButton = repeatMode
+        nowPlayingTemplate.updateNowPlayingButtons([shuffle, repeatMode])
+
+        channel.setMethodCallHandler { [weak self] call, result in
+            switch call.method {
+            case "syncPlaybackModes":
+                guard let arguments = call.arguments as? [String: Any] else {
+                    result(FlutterError(code: "invalid_arguments", message: "Missing playback mode state", details: nil))
+                    return
+                }
+                self?.shuffleButton?.isSelected = arguments["shuffle"] as? Bool ?? false
+                self?.repeatButton?.isSelected = arguments["repeat"] as? Bool ?? false
+                result(nil)
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+    }
+
+    func nowPlayingTemplateUpNextButtonTapped(_ nowPlayingTemplate: CPNowPlayingTemplate) {
+        finampUIChannel?.invokeMethod("showUpNext", arguments: nil)
     }
 }

@@ -9,6 +9,7 @@ import 'package:finamp/services/music_player_background_task.dart';
 import 'package:finamp/services/music_providers.dart';
 import 'package:finamp/services/music_screen_provider.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_carplay/flutter_carplay.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:audio_service/audio_service.dart';
@@ -45,6 +46,8 @@ const _carPlayRecentlyAddedLimit = 3;
 const _carPlayRecentlyPlayedLimit = 5;
 
 class CarPlayHelper {
+  static const MethodChannel _carPlayUiChannel = MethodChannel('finamp/carplay_ui');
+
   ConnectionStatusTypes connectionStatus = ConnectionStatusTypes.unknown;
   final FlutterCarplay _flutterCarplay = FlutterCarplay();
   bool _isPushingPageUpdate = false;
@@ -53,6 +56,10 @@ class CarPlayHelper {
   final providerRef = GetIt.instance<ProviderContainer>();
 
   ProviderSubscription? _userSubscription;
+  StreamSubscription<FinampPlaybackOrder>? _playbackOrderSubscription;
+  StreamSubscription<FinampLoopMode>? _loopModeSubscription;
+  StreamSubscription<FinampQueueItem?>? _currentTrackSubscription;
+  CPListItem? _homeNowPlayingItem;
 
   bool get isUserLoggedIn => _finampUserHelper.currentUser != null;
 
@@ -76,6 +83,25 @@ class CarPlayHelper {
 
   void setupCarplay() {
     _flutterCarplay.addListenerOnConnectionChange(onConnectionChange);
+    _carPlayUiChannel.setMethodCallHandler(_handleCarPlayUiAction);
+
+    _playbackOrderSubscription = _queueService.getPlaybackOrderStream().listen((_) {
+      unawaited(_syncNowPlayingControls());
+    });
+    _loopModeSubscription = _queueService.getLoopModeStream().listen((_) {
+      unawaited(_syncNowPlayingControls());
+    });
+    _currentTrackSubscription = _queueService.getCurrentTrackStream().listen((track) {
+      final homeItem = _homeNowPlayingItem;
+      if (homeItem == null || track == null) return;
+      homeItem.updateTexts(
+        text: track.item.title,
+        detailText: track.item.artist ?? GlobalSnackbar.requireL10n.unknownArtist,
+      );
+      final image = _getCarPlayImageUri(track.baseItem);
+      if (image != null) homeItem.updateImage = image;
+      homeItem.setIsPlaying(true);
+    });
 
     // Listen for user login/logout changes and refresh CarPlay template
     _userSubscription = providerRef.listen(FinampUserHelper.finampCurrentUserProvider, (previous, next) {
@@ -92,6 +118,10 @@ class CarPlayHelper {
 
   void disposeCarplay() {
     _userSubscription?.close();
+    _playbackOrderSubscription?.cancel();
+    _loopModeSubscription?.cancel();
+    _currentTrackSubscription?.cancel();
+    _carPlayUiChannel.setMethodCallHandler(null);
     _closeTemplateSubscriptions();
     _flutterCarplay.removeListenerOnConnectionChange();
   }
@@ -99,6 +129,7 @@ class CarPlayHelper {
   void onConnectionChange(ConnectionStatusTypes status) {
     connectionStatus = status;
     if (status == ConnectionStatusTypes.connected) {
+      unawaited(_syncNowPlayingControls());
       // Resume playback if there's a loaded queue that's paused
       final audioHandler = GetIt.instance<MusicPlayerBackgroundTask>();
       if (_queueService.getCurrentTrack() != null && audioHandler.paused && isUserLoggedIn) {
@@ -110,6 +141,75 @@ class CarPlayHelper {
           _carPlayLogger.warning("Failed to resume playback on CarPlay connect: $e");
         }
       }
+    }
+  }
+
+  Future<Object?> _handleCarPlayUiAction(MethodCall call) async {
+    switch (call.method) {
+      case 'showUpNext':
+        await showUpNextTemplate();
+        return true;
+      case 'toggleShuffle':
+        await _queueService.togglePlaybackOrder();
+        return _queueService.playbackOrder == FinampPlaybackOrder.shuffled;
+      case 'toggleRepeat':
+        _queueService.toggleLoopMode();
+        return _queueService.loopMode != FinampLoopMode.none;
+      default:
+        throw MissingPluginException('Unknown Finamp CarPlay action: ${call.method}');
+    }
+  }
+
+  Future<void> _syncNowPlayingControls() async {
+    if (connectionStatus != ConnectionStatusTypes.connected) return;
+    try {
+      await _carPlayUiChannel.invokeMethod<void>('syncPlaybackModes', {
+        'shuffle': _queueService.playbackOrder == FinampPlaybackOrder.shuffled,
+        'repeat': _queueService.loopMode != FinampLoopMode.none,
+      });
+    } catch (error) {
+      _carPlayLogger.fine('Could not sync CarPlay playback controls: $error');
+    }
+  }
+
+  /// Shows an artwork-rich queue using CarPlay's native list template.
+  Future<void> showUpNextTemplate() async {
+    if (_isPushingPageUpdate) return;
+    _isPushingPageUpdate = true;
+    try {
+      final queue = _queueService.getQueue();
+      final upcoming = <FinampQueueItem>[...queue.nextUp, ...queue.queue].take(_carPlayItemLimit).toList();
+      final items = <CPListItem>[];
+
+      for (final entry in upcoming.indexed) {
+        final index = entry.$1;
+        final item = entry.$2;
+        items.add(
+          CPListItem(
+            text: item.item.title,
+            detailText: item.item.artist,
+            image: _getCarPlayImageUri(item.baseItem),
+            onPress: (complete, self) async {
+              await _queueService.skipByOffset(index + 1);
+              complete();
+              await FlutterCarplay.showSharedNowPlaying();
+            },
+          ),
+        );
+      }
+
+      await FlutterCarplay.push(
+        template: CPListTemplate(
+          title: GlobalSnackbar.requireL10n.nextUp,
+          sections: items.isEmpty ? [] : [CPListSection(items: items)],
+          emptyViewTitleVariants: [GlobalSnackbar.requireL10n.nextUp],
+          emptyViewSubtitleVariants: [GlobalSnackbar.requireL10n.notAvailable],
+          systemIcon: 'list.number',
+          sectionIndexEnabled: false,
+        ),
+      );
+    } finally {
+      _isPushingPageUpdate = false;
     }
   }
 
@@ -296,6 +396,23 @@ class CarPlayHelper {
 
   Future<List<CPListSection>> _buildHomeSections() async {
     List<CPListSection> sections = [];
+    _homeNowPlayingItem = null;
+
+    final currentTrack = _queueService.getCurrentTrack();
+    if (currentTrack != null) {
+      _homeNowPlayingItem = CPListItem(
+        text: currentTrack.item.title,
+        detailText: currentTrack.item.artist,
+        image: _getCarPlayImageUri(currentTrack.baseItem),
+        isPlaying: true,
+        playingIndicatorLocation: CPListItemPlayingIndicatorLocations.trailing,
+        onPress: (complete, self) async {
+          complete();
+          await FlutterCarplay.showSharedNowPlaying();
+        },
+      );
+      sections.add(CPListSection(items: [_homeNowPlayingItem!]));
+    }
 
     CPListSection quickActionsSection = CPListSection(
       items: [
@@ -378,6 +495,7 @@ class CarPlayHelper {
             text: album.name ?? GlobalSnackbar.requireL10n.unknownName,
             detailText: album.albumArtist,
             image: _getCarPlayImageUri(album),
+            accessoryType: CPListItemAccessoryTypes.disclosureIndicator,
             onPress: (complete, self) async {
               await showCollectionTracksTemplate(album);
               complete();
@@ -419,6 +537,7 @@ class CarPlayHelper {
       librarySection.items.add(
         CPListItem(
           text: item.title,
+          accessoryType: CPListItemAccessoryTypes.disclosureIndicator,
           onPress: (complete, self) {
             final parentId = MediaItemId.fromJson(jsonDecode(item.id) as Map<String, dynamic>);
 

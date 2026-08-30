@@ -5,12 +5,12 @@ import 'dart:math';
 import 'package:balanced_text/balanced_text.dart';
 import 'package:finamp/components/Buttons/simple_button.dart';
 import 'package:finamp/components/PlayerScreen/control_area.dart';
+import 'package:finamp/components/PlayerScreen/night_radio_player.dart';
 import 'package:finamp/components/PlayerScreen/player_screen_album_image.dart';
 import 'package:finamp/components/PlayerScreen/player_screen_appbar_title.dart';
 import 'package:finamp/components/PlayerScreen/player_split_screen_scaffold.dart';
 import 'package:finamp/components/PlayerScreen/queue_button.dart';
 import 'package:finamp/components/PlayerScreen/queue_list.dart';
-import 'package:finamp/components/PlayerScreen/track_name_content.dart';
 import 'package:finamp/components/finamp_app_bar_back_button.dart';
 import 'package:finamp/components/global_snackbar.dart';
 import 'package:finamp/l10n/app_localizations.dart';
@@ -22,6 +22,7 @@ import 'package:finamp/screens/blurred_player_screen_background.dart';
 import 'package:finamp/screens/lyrics_screen.dart';
 import 'package:finamp/services/current_track_metadata_provider.dart';
 import 'package:finamp/services/finamp_settings_helper.dart';
+import 'package:finamp/services/media_state_stream.dart';
 import 'package:finamp/services/music_player_background_task.dart';
 import 'package:finamp/services/queue_service.dart';
 import 'package:finamp/services/theme_provider.dart';
@@ -38,6 +39,36 @@ import '../menus/components/icon_button_with_semantics.dart';
 
 const double _defaultToolbarHeight = 53.0;
 const int _defaultMaxToolbarLines = 2;
+
+ThemeData _nightRadioTheme(ThemeData theme) {
+  final scheme = ColorScheme.fromSeed(
+    seedColor: theme.colorScheme.primary,
+    brightness: Brightness.dark,
+    surface: const Color(0xFF0B0E12),
+  );
+  final textTheme = theme.textTheme.apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface);
+
+  return theme.copyWith(
+    brightness: Brightness.dark,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: const Color(0xFF07090C),
+    cardColor: const Color(0xFF11151A),
+    canvasColor: const Color(0xFF090C10),
+    dividerColor: scheme.outline.withValues(alpha: 0.28),
+    iconTheme: IconThemeData(color: scheme.onSurface.withValues(alpha: 0.88)),
+    textTheme: textTheme,
+    appBarTheme: theme.appBarTheme.copyWith(
+      backgroundColor: Colors.transparent,
+      foregroundColor: scheme.onSurface,
+      surfaceTintColor: Colors.transparent,
+    ),
+    sliderTheme: theme.sliderTheme.copyWith(
+      activeTrackColor: scheme.primary,
+      thumbColor: scheme.primary,
+      overlayColor: scheme.primary.withValues(alpha: 0.12),
+    ),
+  );
+}
 
 class PlayerScreen extends StatelessWidget {
   const PlayerScreen({super.key});
@@ -69,6 +100,7 @@ class PlayerScreen extends StatelessWidget {
     });
 
     return PlayerScreenTheme(
+      themeOverride: _nightRadioTheme,
       child: StreamBuilder<FinampQueueInfo?>(
         stream: queueService.getQueueStream(),
         initialData: queueService.getQueue(),
@@ -95,8 +127,8 @@ class PlayerScreen extends StatelessWidget {
       child: Scaffold(
         backgroundColor: Color.alphaBlend(
           Theme.brightnessOf(context) == Brightness.dark
-              ? IconTheme.of(context).color!.withOpacity(0.35)
-              : IconTheme.of(context).color!.withOpacity(0.5),
+              ? IconTheme.of(context).color!.withValues(alpha: 0.35)
+              : IconTheme.of(context).color!.withValues(alpha: 0.5),
           Theme.brightnessOf(context) == Brightness.dark ? Colors.black : Colors.white,
         ),
         // Required for sleep timer input
@@ -156,6 +188,9 @@ class _PlayerScreenContent extends ConsumerWidget {
         (metadata.valueOrNull?.hasLyrics ?? false) &&
         (metadata.valueOrNull?.lyrics != null || metadata.isLoading) &&
         !metadata.hasError;
+    final playbackActive = ref.watch(
+      mediaStateProvider.select((state) => state.playbackState.playing && state.fadeDirection != FadeDirection.fadeOut),
+    );
 
     return SafeArea(
       bottom: true,
@@ -254,9 +289,20 @@ class _PlayerScreenContent extends ConsumerWidget {
                 ),
                 elevation: 0,
                 scrolledUnderElevation: 0.0, // disable tint/shadow when content is scrolled under the app bar
-                centerTitle: true,
+                centerTitle: false,
                 toolbarHeight: toolbarHeight,
-                title: PlayerScreenAppBarTitle(maxLines: maxToolbarLines),
+                title: Row(
+                  children: [
+                    const NightRadioSectionLabel('Finamp'),
+                    Container(
+                      width: 1,
+                      height: 18,
+                      margin: const EdgeInsets.symmetric(horizontal: 10),
+                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.42),
+                    ),
+                    Expanded(child: PlayerScreenAppBarTitle(maxLines: maxToolbarLines)),
+                  ],
+                ),
                 leadingWidth: (isDesktop ? 40.0 : 48.0) * appbarActions.length,
                 leading: Row(children: appbarActions),
                 actions: [],
@@ -267,86 +313,42 @@ class _PlayerScreenContent extends ConsumerWidget {
               extendBodyBehindAppBar: true,
               body: Stack(
                 children: [
-                  if (ref.watch(finampSettingsProvider.useCoverAsBackground)) const BlurredPlayerScreenBackground(),
+                  const Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          center: Alignment(-0.72, -0.82),
+                          radius: 1.35,
+                          colors: [Color(0xFF171D24), Color(0xFF080A0D), Color(0xFF050608)],
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (ref.watch(finampSettingsProvider.useCoverAsBackground))
+                    const Opacity(opacity: 0.28, child: BlurredPlayerScreenBackground()),
+                  const Positioned.fill(child: ColoredBox(color: Color(0x52000000))),
                   SafeArea(
                     minimum: EdgeInsets.only(top: toolbarHeight),
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         controller.setSize(Size(constraints.maxWidth, constraints.maxHeight), screenOrientation, ref);
                         if (controller.useLandscape) {
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: controller.albumSize.width,
-                                height: controller.albumSize.height,
-                                child: Padding(
-                                  // TODO Why does landscape get an additional 3% on top of minAlbumPadding?
-                                  padding: EdgeInsets.only(
-                                    left: constraints.maxHeight * 0.03,
-                                    top: constraints.maxHeight * 0.03,
-                                    bottom: constraints.maxHeight * 0.03,
-                                    right: max(0, constraints.maxHeight * 0.03 - 20),
-                                  ),
-                                  child: Hero(tag: "player", child: const PlayerScreenAlbumImage()),
-                                ),
-                              ),
-                              const Spacer(),
-                              SizedBox(
-                                width: controller.controlsSize.width,
-                                height: controller.controlsSize.height,
-                                child: Column(
-                                  children: [
-                                    const Spacer(flex: 4),
-                                    TrackNameContent(controller),
-                                    const Spacer(flex: 4),
-                                    ControlArea(controller),
-                                    if (controller.shouldShow(PlayerHideable.bottomActions)) const Spacer(flex: 10),
-                                    if (controller.shouldShow(PlayerHideable.bottomActions))
-                                      _buildBottomActions(
-                                        context,
-                                        controller,
-                                        isLyricsLoading: isLyricsLoading,
-                                        isLyricsAvailable: isLyricsAvailable,
-                                      ),
-                                    const Spacer(flex: 4),
-                                  ],
-                                ),
-                              ),
-                              const Spacer(),
-                            ],
+                          return _buildNightRadioLandscape(
+                            context,
+                            constraints,
+                            controller,
+                            playbackActive: playbackActive,
+                            isLyricsLoading: isLyricsLoading,
+                            isLyricsAvailable: isLyricsAvailable,
                           );
                         } else {
-                          return Column(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                height: controller.albumSize.height,
-                                width: controller.albumSize.width,
-                                child: const PlayerScreenAlbumImage(),
-                              ),
-                              SizedBox(
-                                height: controller.controlsSize.height,
-                                width: controller.controlsSize.width,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    TrackNameContent(controller),
-                                    ControlArea(controller),
-                                    if (controller.shouldShow(PlayerHideable.bottomActions))
-                                      _buildBottomActions(
-                                        context,
-                                        controller,
-                                        isLyricsLoading: isLyricsLoading,
-                                        isLyricsAvailable: isLyricsAvailable,
-                                      ),
-                                    if (!controller.shouldShow(PlayerHideable.bottomActions)) const SizedBox(height: 5),
-                                  ],
-                                ),
-                              ),
-                            ],
+                          return _buildNightRadioPortrait(
+                            context,
+                            constraints,
+                            controller,
+                            playbackActive: playbackActive,
+                            isLyricsLoading: isLyricsLoading,
+                            isLyricsAvailable: isLyricsAvailable,
                           );
                         }
                       },
@@ -357,6 +359,137 @@ class _PlayerScreenContent extends ConsumerWidget {
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildNightRadioLandscape(
+    BuildContext context,
+    BoxConstraints constraints,
+    PlayerHideableController controller, {
+    required bool playbackActive,
+    required bool isLyricsLoading,
+    required bool isLyricsAvailable,
+  }) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final showQueuePanel = constraints.maxWidth >= 760 && constraints.maxHeight >= 285 && textScale <= 1.35;
+    final compact = constraints.maxHeight < 370;
+    final visualizerHeight = compact ? 27.0 : 42.0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(flex: showQueuePanel ? 34 : 42, child: _buildArtworkDeck(compact: true)),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: showQueuePanel ? 40 : 58,
+            child: NightRadioPanel(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: SingleChildScrollView(
+                primary: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    NightRadioTrackDetails(compact: compact),
+                    SizedBox(height: compact ? 5 : 9),
+                    NightRadioVisualizer(active: playbackActive, height: visualizerHeight),
+                    SizedBox(height: compact ? 3 : 7),
+                    ControlArea(controller),
+                    if (controller.shouldShow(PlayerHideable.bottomActions)) ...[
+                      SizedBox(height: compact ? 1 : 5),
+                      _buildBottomActions(
+                        context,
+                        controller,
+                        isLyricsLoading: isLyricsLoading,
+                        isLyricsAvailable: isLyricsAvailable,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (showQueuePanel) ...[const SizedBox(width: 10), const Expanded(flex: 32, child: NightRadioQueuePanel())],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNightRadioPortrait(
+    BuildContext context,
+    BoxConstraints constraints,
+    PlayerHideableController controller, {
+    required bool playbackActive,
+    required bool isLyricsLoading,
+    required bool isLyricsAvailable,
+  }) {
+    final artworkHeight = min(controller.albumSize.height, constraints.maxHeight * 0.52);
+    final compact = constraints.maxHeight < 630;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+      child: Column(
+        children: [
+          SizedBox(height: artworkHeight, width: double.infinity, child: _buildArtworkDeck()),
+          const SizedBox(height: 10),
+          Expanded(
+            child: NightRadioPanel(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: SingleChildScrollView(
+                primary: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    NightRadioTrackDetails(compact: compact),
+                    SizedBox(height: compact ? 5 : 9),
+                    NightRadioVisualizer(active: playbackActive, height: compact ? 28 : 42),
+                    SizedBox(height: compact ? 2 : 7),
+                    ControlArea(controller),
+                    if (controller.shouldShow(PlayerHideable.bottomActions)) ...[
+                      SizedBox(height: compact ? 1 : 5),
+                      _buildBottomActions(
+                        context,
+                        controller,
+                        isLyricsLoading: isLyricsLoading,
+                        isLyricsAvailable: isLyricsAvailable,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildArtworkDeck({bool compact = false}) {
+    return NightRadioPanel(
+      padding: EdgeInsets.all(compact ? 5 : 7),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Hero(
+            tag: 'player',
+            child: PlayerScreenAlbumImage(padding: EdgeInsets.all(compact ? 2 : 3)),
+          ),
+          Positioned(
+            top: 5,
+            right: 5,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xCC07090C),
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: const NightRadioSectionLabel('On Air'),
+            ),
+          ),
+        ],
       ),
     );
   }

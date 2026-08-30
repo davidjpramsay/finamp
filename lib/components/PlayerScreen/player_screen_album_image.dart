@@ -18,7 +18,11 @@ import '../../services/favorite_provider.dart';
 import '../album_image.dart';
 
 class PlayerScreenAlbumImage extends ConsumerWidget {
-  const PlayerScreenAlbumImage({super.key});
+  const PlayerScreenAlbumImage({super.key, this.padding});
+
+  /// Optional fixed inset for layouts that already provide their own framed
+  /// artwork surface. When omitted, the user-configured cover padding applies.
+  final EdgeInsetsGeometry? padding;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -86,7 +90,7 @@ class PlayerScreenAlbumImage extends ConsumerWidget {
                   final horizontalPadding = constraints.maxWidth * (minPadding / 100.0);
                   final verticalPadding = constraints.maxHeight * (minPadding / 100.0);
                   return Padding(
-                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
+                    padding: padding ?? EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
                     child: AlbumImage(
                       imageListenable: currentAlbumImageProvider,
                       borderRadius: BorderRadius.circular(8.0),
@@ -94,7 +98,11 @@ class PlayerScreenAlbumImage extends ConsumerWidget {
                       autoScale: false,
                       decoration: BoxDecoration(
                         boxShadow: [
-                          BoxShadow(blurRadius: 24, offset: const Offset(0, 4), color: Colors.black.withOpacity(0.3)),
+                          BoxShadow(
+                            blurRadius: 24,
+                            offset: const Offset(0, 4),
+                            color: Colors.black.withValues(alpha: 0.3),
+                          ),
                         ],
                       ),
                     ),
